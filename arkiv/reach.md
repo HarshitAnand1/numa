@@ -7,4 +7,4 @@
 - The seeded rows are `[DEMO]` data we published ourselves. We have **no real users and no real sales yet**.
 - Gasless checkout depends on the Whitechain Sepolia deployment. Status is tracked in [`docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md); do not assume it is live unless that file says so.
 
-**Will we keep building?** TODO(team): state the real commitment after Mumbai. We will not claim one here until the team has decided.
+**Will we keep building?** Yes. The team intends to keep building Numa after Mumbai: finish the live gasless checkout, onboard real merchants and creators, and grow the Arkiv-based creator directory.
