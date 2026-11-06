@@ -4,6 +4,7 @@
 |---|---|---|
 | GET | `/health` | liveness, relayer address and WBT balance |
 | POST | `/orders` | **Demo** merchant order service: signs an EIP-712 `Order` with `MERCHANT_SIGNER_KEY`. Real merchants sign in their own backend (`@numa/sdk-server`, not built yet). 501 if key unset |
+| GET | `/relay/:orderId` | Relay outcome for an order: `{orderId, status: claimed\|sent\|settled\|reverted, txHash, explorer}`; 404 if unknown |
 | POST | `/relay` | Submit buyer's EIP-3009 authorization + signed order; relayer calls `payOrder` |
 
 `POST /orders` body: `{ campaignId: "7", creator: "0x..", amount: "25.00", orderId?: "0x<32 bytes>" }`

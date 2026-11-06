@@ -32,6 +32,22 @@ d("Postgres stores", () => {
     await s.releaseOrder(id(run + 1));
     expect(await s.claimOrder(id(run + 1), "0xa")).toBe(false);
   });
+  it("tracks claim status: sent -> listSent -> settled; reverted orders can be claimed again", async () => {
+    const s = new PgRelayStore(pool);
+    const a = id(run + 10), b = id(run + 11);
+    await s.claimOrder(a, "0xAbC");
+    expect((await s.getClaim(a))?.status).toBe("claimed");
+    await s.markSent(a, id(1));
+    expect(await s.listSent(60_000)).not.toContainEqual(expect.objectContaining({ orderId: a })); // too young
+    expect(await s.listSent(-1000)).toContainEqual(expect.objectContaining({ orderId: a, status: "sent", txHash: id(1), buyer: "0xabc" }));
+    await s.markSettled(a);
+    expect((await s.getClaim(a))?.status).toBe("settled");
+    expect(await s.claimOrder(a, "0xabc")).toBe(false); // settled orders are never reclaimable
+    await s.claimOrder(b, "0xabc"); await s.markSent(b, id(2)); await s.markReverted(b);
+    expect(await s.claimOrder(b, "0xabc")).toBe(true); // reverted is
+    expect((await s.getClaim(b))?.txHash).toBeNull();
+    expect(await s.getClaim(id(run + 99))).toBeUndefined();
+  });
   it("accumulates spend and per-address counts (case-insensitive address)", async () => {
     const s = new PgRelayStore(pool);
     const day = `t-${run}`;

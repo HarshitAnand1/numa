@@ -120,7 +120,12 @@ export class Relayer {
       try {
         receipt = await this.pub.waitForTransactionReceipt({ hash: txHash, timeout: this.cfg.receiptTimeoutMs ?? 60_000 });
       } catch { throw new RelayError("TX_TIMEOUT", `no receipt for ${txHash}; check explorer before retrying`); }
-      if (receipt.status !== "success") throw new RelayError("TX_REVERTED", `tx ${txHash} reverted`);
+      if (receipt.status !== "success") {
+        // The receipt proves the order was NOT settled, so the order may be submitted again (by a new request).
+        await this.store.markReverted(order.orderId);
+        throw new RelayError("TX_REVERTED", `tx ${txHash} reverted`);
+      }
+      await this.store.markSettled(order.orderId);
 
       const cost = receipt.gasUsed * receipt.effectiveGasPrice;
       await this.store.addSpend(day, cost);
