@@ -1,7 +1,11 @@
 import { getAddress, isAddress, verifyMessage, type Address, type Hex } from "viem";
 import { z } from "zod";
+import { AGENT_AUTH_WINDOW_SECONDS, policyAuthMessage, type AgentRole } from "@numa/shared";
 
-export type Role = "creator" | "merchant";
+// Single source of truth for the signed text lives in @numa/shared so the browser cannot drift from the API.
+export { AGENT_AUTH_WINDOW_SECONDS as AUTH_WINDOW_SECONDS, policyAuthMessage };
+
+export type Role = AgentRole;
 
 /** Private guardrails. `limitBps` is the creator's floor or the merchant's ceiling. Never published to Arkiv. */
 export interface Policy {
@@ -40,15 +44,9 @@ export function parsePolicy(raw: unknown): Policy {
   return { ...p, principal: getAddress(p.principal) };
 }
 
-export const AUTH_WINDOW_SECONDS = 300;
-/** The exact text a principal signs (EIP-191) to read or change their policy. */
-export function policyAuthMessage(action: "write" | "read", principal: string, role: Role, issuedAt: number, body: unknown): string {
-  return `numa-agent:v1\naction:${action}\nprincipal:${principal.toLowerCase()}\nrole:${role}\nissuedAt:${issuedAt}\nbody:${JSON.stringify(body ?? null)}`;
-}
-
 /** Proves the caller controls `principal`. Rejects stale signatures. */
 export async function verifyPolicyAuth(a: { action: "write" | "read"; principal: Address; role: Role; issuedAt: number; body?: unknown; signature: Hex; now?: number }) {
   const now = a.now ?? Math.floor(Date.now() / 1000);
-  if (Math.abs(now - a.issuedAt) > AUTH_WINDOW_SECONDS) return false;
+  if (Math.abs(now - a.issuedAt) > AGENT_AUTH_WINDOW_SECONDS) return false;
   return verifyMessage({ address: a.principal, message: policyAuthMessage(a.action, a.principal, a.role, a.issuedAt, a.body), signature: a.signature }).catch(() => false);
 }

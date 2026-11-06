@@ -10,7 +10,7 @@ _Last reviewed: 2026-11-07. Everything marked "verified" was run; everything els
 | 1 Research | Done: Whitechain USDT supports EIP-3009 (`WHITECHAIN.md`), refund model decided (ADR 0001), Arkiv SDK researched (`ARKIV.md`) |
 | 2 Foundation | Done: pnpm monorepo, Foundry + OpenZeppelin, Docker Compose, ESLint, GitHub Actions CI (typecheck, lint, tests with Postgres, forge build/test; passing on `main`), `.env.example` |
 | 3 Contracts | Built, **not deployed**. `CampaignRegistry` + `NumaRouter`, 55 Foundry tests (unit, fuzz, invariants), `OrderCommitment` nonce binding (ADR 0005), pre-deployment hardening (ADR 0006). A deploy script and checklist exist (`DEPLOYMENT_CHECKLIST.md`). Owner: Member 1 |
-| 4 Arkiv + backend | Built and tested; **never run against a deployed router**. Relayer with guards, reconciler, release keeper, indexer, click tracker, discovery + reputation API, negotiation agents (below), Dockerfile, Postgres store. Arkiv live checks pass on Rabdi (`live:check` 9/9, `live:agents` 4/4) |
+| 4 Arkiv + backend | Built and tested; **never run against a deployed router**. Relayer with guards, reconciler, release keeper, indexer, click tracker, discovery + reputation API, negotiation agents (below), Dockerfile, Postgres store. Arkiv live checks pass on Rabdi (`live:check` 9/9, `live:agents` 4/4, `live:browser` 3/3) |
 | 5 Frontend | Partial (branch `feat/frontend`): `apps/web` Vite SPA. **Public screens (home trending, campaigns, creator card, leaderboard) read `apps/api` discovery endpoints** through a typed client, with a visibly labelled DEMO DATA fallback when the API is unreachable. Real URL routing (deep links, back/forward, 404). Campaign detail reads the campaign from the API. Creator/merchant dashboards, checkout, verify and demo shop are still **mock data only**. Wallet connect and buyer signing are built (see Frontend section); no chain or Arkiv writes. 59 unit tests. See ADR 0005. |
 | 6 SDK + demo shop | Partial (branch `feat/frontend`): `@numa/sdk-react` (verify-then-sign checkout hook, `<NumaCheckout>`, `<NumaProvider>`, 31 tests) and `apps/demo-shop` (a separate-brand store embedding it) are built. **Exercised only against a stand-in wallet, API and chain, never a real deployment.** |
 | 7 End-to-end | Not started (blocked on deployment) |
@@ -27,7 +27,7 @@ Foundry 55 · `apps/api` 84 (+8 Postgres integration tests that run in CI and ar
 ## Not verified (do not claim these)
 - Any path through a deployed `NumaRouter` or `CampaignRegistry`: relay, reconciler, release keeper, click-stats verification, `merchantVerified`, agent runner against the registry.
 - Gasless `receiveWithAuthorization` with a real transfer (the token domain and selectors are verified, the transfer is not).
-- Arkiv entity expiry actually firing, full 100-row pages, large payloads, browser-wallet writes.
+- Arkiv entity expiry actually firing, full 100-row pages, large payloads. Browser-wallet writes are verified only through a stand-in injected wallet, **not** a real extension (`ARKIV.md` → Browser wallets).
 - The Claude note path of the agents against the real API (tests use a fake client).
 - The Docker `app` compose profile (config-validated only; the API image itself was built and its `/health` checked).
 
@@ -49,7 +49,7 @@ The backend's pre-contract proposal differed from what Member 1 shipped. Fixed i
 - **Click tracker:** `/r/:code` counts clicks (hashed visitor) and `demo:fake-clicks` shows 500 clicks next to 0 verified sales (`DEMO.md`).
 - **Discovery:** campaigns, trending, creator search, leaderboard, creator card, recommendations, invites (`API.md`, `ARKIV.md`). Seeded with `[DEMO]` data on Rabdi via `seed:demo`; those campaign ids do not exist on-chain and show as unverified.
 - **Operational:** CORS allowlist (`CORS_ORIGINS`), discovery timeout (504 after `DISCOVERY_TIMEOUT_MS`), Postgres migrations (001-005), Dockerfile.
-- **Negotiation agents** (`AGENTS.md`, ADR 0008, **Proposed**): `numa.agent` and `numa.negotiation` entities, rules engine with private guardrails, signed policy API, verified threads, deal tickets, runner loop (off unless `AGENT_WALLET_PRIVATE_KEY` is set), optional Claude phrasing. Not built: any UI, a browser onboarding flow, a live run against a registry.
+- **Negotiation agents** (`AGENTS.md`, ADR 0008, **Proposed**): `numa.agent` and `numa.negotiation` entities, rules engine with private guardrails, signed policy API, verified threads, deal tickets, runner loop (off unless `AGENT_WALLET_PRIVATE_KEY` is set), optional Claude phrasing. Feed and status endpoints for the UI (`/agents/threads`, `/agents/binding`) and the shared signed-text builder (`@numa/shared`) are built. Not built: any UI, a live run against a registry.
 
 ## Open decisions
 - **Merchant signing model.** `POST /orders` signs with a server-held `MERCHANT_SIGNER_KEY` (demo). Real merchants sign in their own backend with `@numa/sdk-server`; a hosted flow needs the merchant's own signature or a registered `payoutSigner`.
