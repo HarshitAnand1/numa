@@ -13,7 +13,13 @@ app.post("/api/order", async (req, res) => {
   res.json(await numa.createOrder({ amount: "25.00", creator, buyer }));
 });
 ```
-`createOrder` returns a JSON-safe `OrderPayload`: `{ order{campaignId,merchant,creator,buyer,amount,orderId,deadline}, digest, authNonce, merchantSig, payoutSigner, router, chainId }`. In the *input*, `amount` is a decimal USDT string with at most 6 decimals (`"25.00"`). In the returned `order`, `amount` is the same value in base units (`"25000000"`), and **`/relay` expects that field to be named `gross`**, so a client must rename it (the API's `POST /orders` already returns `gross`). This naming mismatch is a known rough edge; orders expire after `ttlSeconds` (default 900). `authNonce` is the `OrderCommitment`: the buyer must use it as the EIP-3009 nonce, which binds the payment to this exact order and split (ADR 0005). The signer key stays on the merchant's server.
+`createOrder` returns a JSON-safe `OrderPayload`: `{ order{campaignId,merchant,creator,buyer,gross,orderId,deadline}, digest, authNonce, merchantSig, payoutSigner, router, chainId }`. In the *input*, `amount` is a decimal USDT string with at most 6 decimals (`"25.00"`); in the returned `order`, `gross` is the same value in base units (`"25000000"`). `order` is exactly the shape the relayer's `POST /relay` expects, so nothing needs renaming. Orders expire after `ttlSeconds` (default 900). `authNonce` is the `OrderCommitment`: the buyer must use it as the EIP-3009 nonce, which binds the payment to this exact order and split (ADR 0005). The signer key stays on the merchant's server.
+
+After the buyer signs, build the relay body with the helper (it validates against the shared schema, so a mistake fails in the browser or merchant server, not at the relayer):
+```ts
+import { toRelayRequest } from "@numa/sdk-server";
+const body = toRelayRequest(payload, { validAfter, validBefore, v, r, s }); // POST this to /relay
+```
 
 Notes: `merchant` (the campaign's merchant address) is distinct from the payout-signer key. `creator` and `buyer` are passed per order; direct sales without a creator are not supported by the current design. `OrderSigner` is the lower-level class (explicit campaign per call); the API's demo `POST /orders` uses it.
 
