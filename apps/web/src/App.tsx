@@ -9,6 +9,7 @@ import type { ApiCampaign, ApiRecommendation } from "./api/types";
 import { parseCheckoutParams, useCheckout, type CheckoutParams } from "@numa/sdk-react";
 import { CHAIN_ID, CONTRACTS_READY, NUMA_CONFIG } from "./web3/config";
 import { WalletButton } from "./web3/WalletButton";
+import { Agents } from "./agents/AgentsPage";
 import { parseRoute, routeToPath, titleFor, type Route, type View } from "./routes";
 
 /**
@@ -531,6 +532,9 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
           >
             leaderboard
           </button>
+          <button className={view === "agents" ? "active" : ""} onClick={() => go("agents")}>
+            agents
+          </button>
           <button onClick={() => go("verify")}>verify a sale</button>
         </nav>
         <div className="nav-actions">
@@ -586,6 +590,7 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
                 "merchant",
                 "demo",
                 "verify",
+                "agents",
                 "system",
               ] as View[]
             ).map((v, i) => (
@@ -3551,6 +3556,7 @@ function Footer({ setView }: { setView: (v: View) => void }) {
           <button onClick={() => setView("campaigns")}>campaigns</button>
           <button onClick={() => setView("leaderboard")}>leaderboard</button>
           <button onClick={() => setView("verify")}>verify</button>
+          <button onClick={() => setView("agents")}>agents</button>
           <button onClick={() => setView("demo")}>demo shop</button>
           <button onClick={() => setView("creatorApp")}>creator app</button>
           <button onClick={() => setView("merchant")}>merchant app</button>
@@ -3672,6 +3678,7 @@ export default function App() {
       {view === "demo" && <DemoShop />}
       {view === "verify" && <Verify />}
       {view === "system" && <SystemStates />}
+      {view === "agents" && <Agents />}
       {view === "notFound" && <NotFound />}
       {view !== "checkout" && view !== "demo" && <Footer setView={setView} />}
     </div>
