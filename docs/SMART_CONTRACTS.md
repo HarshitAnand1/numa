@@ -5,6 +5,7 @@ Foundry, Solidity 0.8.28, OpenZeppelin (SafeERC20, ReentrancyGuard, EIP712, ECDS
 ## CampaignRegistry
 - `createCampaign(payoutSigner, commissionBps ≤ 5000, endsAt, …) → id` — caller is merchant.
 - `approveCreator(id, creator)`, `revokeCreator(id, creator)`, `pause(id)` — merchant only.
+- **Required by the backend:** `merchantOf(campaignId) → address` (proposed ABI in `packages/shared/src/abi.ts`) so Arkiv campaigns/invites can be authenticated.
 - Views used by the router: campaign status/active (not paused, not ended), merchant, payoutSigner, commissionBps, `isApproved(id, creator)`.
 - Mutability (proposal): `commissionBps` and `endsAt` immutable after creation (approved terms can't change under creators); `payoutSigner` and pause state mutable by merchant.
 - Events: CampaignCreated, CreatorApproved, CreatorRevoked, CampaignPaused.

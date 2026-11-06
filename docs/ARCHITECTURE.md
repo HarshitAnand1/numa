@@ -128,3 +128,19 @@ flowchart TD
   E -->|no| SKIP[ignore record]
   E -->|yes| SC[score: gross, distinct payers, count, commission]
 ```
+
+## Creator discovery layer
+```mermaid
+flowchart LR
+  Cr[Creator] -->|publish/renew| P[numa.profile]
+  Me[Merchant] -->|publish| C[numa.campaign]
+  Me -->|publish 48h| I[numa.invite]
+  Me -->|publish after sale| E[numa.endorsement]
+  W[Numa writer] -->|publish| V[numa.conversion]
+  P & C & I & E & V --> API[API: verify + rank]
+  CH[(Whitechain: OrderSettled, merchantOf)] --> API
+  API --> S1[creator search]
+  API --> S2[recommendations]
+  API --> S3[trending / leaderboard]
+  API --> S4[creator card]
+```
