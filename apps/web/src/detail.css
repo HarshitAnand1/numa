@@ -1,0 +1,573 @@
+/* Campaign detail page + the "make your ask" modal. The Figma export never styled these. */
+
+.detail-page {
+  min-height: 80vh;
+}
+
+/* ---------- poster ---------- */
+.campaign-poster {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  grid-template-rows: auto 1fr;
+  column-gap: 5vw;
+  min-height: 560px;
+  padding: 26px 4.45vw 70px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+.campaign-back {
+  position: relative;
+  z-index: 3;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.campaign-back button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bone);
+  font: 600 11px "JetBrains Mono";
+  letter-spacing: 0.06em;
+  transition: color 0.3s;
+}
+.campaign-back button:hover {
+  color: var(--green);
+}
+.poster-noise {
+  position: absolute;
+  z-index: 0;
+  right: -2vw;
+  bottom: -9vw;
+  font: 900 38vw / 0.8 "Unbounded";
+  letter-spacing: -0.1em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(236, 232, 225, 0.08);
+  user-select: none;
+  pointer-events: none;
+}
+.campaign-title {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  padding: 50px 0 10px;
+}
+.campaign-title h1 {
+  margin: 22px 0 26px;
+  font: 900 clamp(42px, 7.4vw, 116px) / 0.9 "Unbounded";
+  letter-spacing: -0.06em;
+}
+.campaign-title h1 em {
+  color: var(--red);
+  font-style: normal;
+}
+.campaign-title p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--grey);
+  font-size: 18px;
+  line-height: 1.45;
+}
+.campaign-ask {
+  position: relative;
+  z-index: 2;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--charcoal);
+}
+.campaign-ask > span,
+.campaign-ask small {
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.campaign-ask strong {
+  color: var(--green);
+  font: 900 clamp(56px, 6vw, 88px) / 0.9 "Unbounded";
+  letter-spacing: -0.07em;
+}
+.campaign-ask button {
+  margin-top: 8px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border: 1px solid var(--black);
+  background: var(--green);
+  color: var(--black);
+  font: 800 13px "Unbounded";
+  letter-spacing: -0.03em;
+  box-shadow: 5px 5px 0 var(--bone);
+  transition:
+    transform 0.3s var(--expo),
+    box-shadow 0.3s var(--expo);
+}
+.campaign-ask button:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 8px 8px 0 var(--bone);
+}
+.campaign-ask button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--bone);
+}
+
+/* ---------- terms bar ---------- */
+.campaign-terms {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+.campaign-terms > div {
+  padding: 28px 4.45vw 30px 2.2vw;
+  border-left: 1px solid var(--line);
+}
+.campaign-terms > div:first-child {
+  padding-left: 4.45vw;
+  border-left: 0;
+}
+.campaign-terms span {
+  display: block;
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.campaign-terms b {
+  display: block;
+  margin-top: 12px;
+  font: 800 clamp(16px, 1.8vw, 26px) "Unbounded";
+  letter-spacing: -0.04em;
+}
+.green-copy {
+  color: var(--green);
+}
+
+/* ---------- body ---------- */
+.campaign-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr);
+  gap: 6vw;
+  align-items: start;
+  padding: 90px 4.45vw 110px;
+}
+.campaign-copy > span {
+  color: var(--green);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.campaign-copy h2 {
+  margin: 22px 0;
+  font: 900 clamp(30px, 3.8vw, 58px) / 0.98 "Unbounded";
+  letter-spacing: -0.06em;
+}
+.campaign-copy > p {
+  max-width: 62ch;
+  color: var(--grey);
+  font-size: 18px;
+  line-height: 1.55;
+}
+.do-dont {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 36px 0;
+}
+.do-dont > div {
+  padding: 20px;
+  border: 1px solid var(--line);
+}
+.do-dont b {
+  font: 700 11px "JetBrains Mono";
+  letter-spacing: 0.1em;
+  color: var(--green);
+}
+.do-dont > div:last-child b {
+  color: var(--red);
+}
+.do-dont p {
+  margin: 10px 0 0;
+  color: var(--bone);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.campaign-timeline {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+.campaign-timeline > div {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  font: 12px "JetBrains Mono";
+}
+.campaign-timeline i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--grey);
+  border-radius: 50%;
+}
+.campaign-timeline i.done {
+  border-color: var(--green);
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(57, 255, 20, 0.16);
+}
+.campaign-timeline small {
+  color: var(--grey);
+  letter-spacing: 0.08em;
+}
+.detail-calc {
+  position: sticky;
+  top: 96px;
+  padding: 26px;
+  border: 1px solid var(--line);
+  background: var(--charcoal);
+}
+.detail-calc h3 {
+  margin: 0 0 18px;
+  font: 800 26px "Unbounded";
+  letter-spacing: -0.05em;
+}
+.detail-calc > p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+}
+.arkiv-sync i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 1.8s infinite;
+}
+
+/* ---------- "make your ask" modal ---------- */
+.offer-modal {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.modal-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  animation: fadeIn 0.3s var(--expo);
+}
+.offer-modal > section {
+  position: relative;
+  width: min(660px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--bone);
+  background: var(--black);
+  box-shadow: 8px 8px 0 var(--green);
+  animation: modalIn 0.5s var(--expo);
+}
+.offer-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.offer-modal-head span {
+  color: var(--green);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.offer-modal-head h2 {
+  margin: 8px 0 0;
+  font: 900 clamp(28px, 4vw, 40px) / 1 "Unbounded";
+  letter-spacing: -0.06em;
+}
+.offer-modal-head button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: none;
+  transition: border-color 0.3s;
+}
+.offer-modal-head button:hover {
+  border-color: var(--green);
+}
+.offer-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.offer-progress button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--grey);
+  font: 600 10px "JetBrains Mono";
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.offer-progress button i {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 9px;
+}
+.offer-progress button.active {
+  border-color: var(--green);
+  color: var(--green);
+}
+.offer-progress button.done {
+  color: var(--bone);
+}
+.offer-form {
+  display: grid;
+  gap: 20px;
+  min-height: 250px;
+}
+.offer-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--grey);
+  font: 600 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.offer-form select,
+.offer-form textarea,
+.offer-form input[type="number"] {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--charcoal);
+  color: var(--bone);
+  font: 400 16px "Inter Tight";
+  letter-spacing: 0;
+  text-transform: none;
+}
+.offer-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+.offer-form select:focus,
+.offer-form textarea:focus,
+.offer-form input:focus {
+  border-color: var(--green);
+}
+.offer-form label small {
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ask-slider strong {
+  color: var(--green);
+  font: 900 56px / 1 "Unbounded";
+  letter-spacing: -0.07em;
+}
+.ask-slider strong small {
+  margin-left: 8px;
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+  letter-spacing: 0;
+}
+.ask-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--green);
+}
+.ask-slider > span {
+  color: var(--grey);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.validation-note {
+  padding: 12px 14px;
+  border-left: 2px solid var(--red);
+  color: var(--grey);
+  font: 12px / 1.5 "JetBrains Mono";
+}
+.offer-review {
+  display: grid;
+  gap: 0;
+}
+.offer-review > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.offer-review > div span {
+  flex: none;
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.offer-review > div b {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font: 700 15px "Inter Tight";
+}
+.offer-review aside {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px dashed #ffb800;
+}
+.offer-review aside b {
+  color: #ffb800;
+  font: 700 11px "JetBrains Mono";
+  letter-spacing: 0.06em;
+}
+.offer-review aside p {
+  margin: 8px 0 0;
+  color: var(--grey);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.offer-modal-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 26px;
+}
+.offer-modal-actions > button:first-child,
+.offer-success > button {
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  background: none;
+  font: 600 12px "JetBrains Mono";
+  transition: border-color 0.3s;
+}
+.offer-modal-actions > button:first-child:hover:not(:disabled),
+.offer-success > button:hover {
+  border-color: var(--bone);
+}
+.offer-modal-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.offer-modal-actions .hard-button {
+  border: 1px solid var(--black);
+  background: var(--green);
+  color: var(--black);
+  box-shadow: 4px 4px 0 var(--bone);
+}
+.offer-success {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px 0 8px;
+  text-align: center;
+}
+.offer-success .stamp {
+  font-size: 26px;
+}
+.offer-success strong {
+  font: 900 52px / 1 "Unbounded";
+  letter-spacing: -0.07em;
+}
+.offer-success > span:not(.stamp) {
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.offer-success p {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--grey);
+  line-height: 1.5;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.98);
+  }
+}
+
+@media (max-width: 900px) {
+  .campaign-poster {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    min-height: 0;
+    padding: 22px 20px 40px;
+  }
+  .campaign-title {
+    padding: 36px 0 24px;
+  }
+  .campaign-title h1 {
+    font-size: clamp(38px, 11vw, 80px);
+  }
+  .poster-noise {
+    font-size: 70vw;
+    bottom: -14vw;
+  }
+  .campaign-terms {
+    grid-template-columns: 1fr 1fr;
+  }
+  .campaign-terms > div,
+  .campaign-terms > div:first-child {
+    padding: 22px 20px;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .campaign-terms > div:nth-child(even) {
+    border-left: 1px solid var(--line);
+  }
+  .campaign-body {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding: 56px 20px 72px;
+  }
+  .detail-calc {
+    position: static;
+  }
+  .do-dont {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .offer-modal > section,
+  .modal-scrim {
+    animation: none;
+  }
+}

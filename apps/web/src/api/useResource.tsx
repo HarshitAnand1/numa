@@ -51,7 +51,6 @@ export function useResource<T>(
         setState({ data: demoRef.current(), status: "demo", reason });
       });
     return () => ctrl.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
