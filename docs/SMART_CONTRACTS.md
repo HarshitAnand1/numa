@@ -1,7 +1,7 @@
 # Smart Contracts
 
 Owner: Member 1 (`packages/contracts`, branch `feat/contracts`). Status: implemented and tested
-on a local Foundry chain (41/41 tests passing, including a 512-run fuzz invariant). **Not yet
+on a local Foundry chain (49/49 tests passing, including two 512-run fuzz invariants). **Not yet
 deployed to Whitechain Sepolia** — see "Deployment" below and `docs/PROJECT_STATUS.md`. **Not yet
 integrated with the backend/relayer** — see `docs/PROJECT_STATUS.md` → "Interface reconciliation"
 for a list of concrete gaps between this implementation and the backend's pre-implementation
@@ -58,10 +58,30 @@ EIP-3009 signature and the merchant's EIP-712 signature are what authorize the s
 `msg.sender`. Relayer-side allowlisting, rate limiting and spend caps are an operational concern
 for Member 2, not enforced on-chain.
 
-**Note on `authNonce`:** the caller must supply the EIP-3009 authorization nonce explicitly as a
-parameter — the contract does not derive or recompute it internally. An earlier backend proposal
-assumed a `payOrder` signature with no explicit `authNonce` parameter; see
-`docs/PROJECT_STATUS.md` → "Interface reconciliation."
+**`authNonce` must equal `computeOrderCommitment(order, campaign.commissionBps, feeBps)`.** This
+is checked (step 4.5, after the merchant-signature check, before the EIP-3009 call) via:
+
+```solidity
+bytes32 expectedCommitment = computeOrderCommitment(order, campaign.commissionBps, feeBps);
+require(authNonce == expectedCommitment, "NumaRouter: authNonce does not match order commitment");
+```
+
+`computeOrderCommitment` is a `public view` function computing an EIP-712 digest (router domain,
+`ORDER_COMMITMENT_TYPEHASH`) over `{campaignId, merchant, creator, buyer, gross, commissionBps,
+feeBps, orderId, deadline}`. This binds the buyer's EIP-3009 authorization to the complete order
+and split terms — without it, a buyer's authorized payment (which EIP-3009 alone only ties to
+`from`/`to`/`value`/a window) could be paired by the relayer (or anyone, since `payOrder` is
+permissionless) with a *different*, independently merchant-signed order of the same `gross`,
+redirecting the commission/merchant-net split. See
+`docs/DECISIONS/0005-order-commitment-nonce-binding.md` for the full design rationale, the fields
+deliberately excluded (`feeRecipient`, the token address — both immutable-and-domain-pinned
+already), and why there's no circular hash dependency. **Field order and types must exactly match
+between Solidity and TypeScript** — `commissionBps`/`feeBps` are `uint96`, not `uint256`; a width
+mismatch in the type string silently produces a non-matching digest. A fixed cross-language test
+vector (same inputs, same expected digest, asserted independently in both
+`test/NumaRouter.t.sol::test_fixedVector_orderCommitmentMatchesCrossLanguageSpec` and — once
+implemented — a matching TypeScript test in `packages/shared`) is the mechanism for catching any
+such divergence.
 
 #### `refund(orderId, refundAmount)`
 
@@ -101,6 +121,10 @@ deployed (currently empty).
 - EIP-3009 authorization for buyer payments (no buyer WBT, no buyer approval needed).
 - Replay protection: `orderId` can only be settled once; EIP-3009 `authNonce` is tracked by the
   token itself (`authorizationState`).
+- `authNonce` must equal `computeOrderCommitment(order, campaign.commissionBps, feeBps)` — binds
+  the buyer's authorized payment to the complete order and split terms, preventing a relayer (or
+  anyone, since `payOrder` is permissionless) from settling a different order with a buyer's
+  authorization. See `docs/DECISIONS/0005-order-commitment-nonce-binding.md`.
 - Order deadline and campaign `endsAt` enforcement.
 - Commission capped at 50% (registry), protocol fee capped at 1% (router), both at construction
   or campaign-creation time — not owner-adjustable after the fact (no admin key to misuse).
@@ -119,6 +143,13 @@ Proven by the test suite (see "Testing" below):
 - `heldCommission` after N refunds equals `commission` minus the sum of each refund's clawback,
   and a refund of the full refundable base claws back exactly the full held commission and pulls
   exactly `merchantNet` from the merchant, never more (`test_refund_maxRefundableClawsBackEntireCommission`).
+- `computeOrderCommitment`'s digest never collides with the `Order` EIP-712 signing digest for any
+  field values (`testFuzz_orderCommitmentNeverCollidesWithOrderDigest`, 512 fuzz runs) — guards
+  against a future refactor accidentally reusing one typehash for both purposes.
+- An order/creator/campaign substitution attack (pairing a buyer's authorization with a different,
+  independently valid order of the same `gross`) is rejected
+  (`test_payOrder_rejectsCreatorSubstitution`, `test_payOrder_rejectsCampaignAndMerchantSubstitution`,
+  `test_payOrder_rejectsOrderIdSubstitution`).
 
 Structurally true but **not yet explicitly fuzzed across multiple concurrent orders**: the
 router's USDT balance should always be ≥ the sum of `heldCommission` across all unreleased orders
@@ -163,11 +194,17 @@ pnpm contracts:build
 pnpm contracts:test
 ```
 
-41 tests across `test/CampaignRegistry.t.sol` and `test/NumaRouter.t.sol`: unit tests for every
-access-control and validation branch, plus a fuzz test for the payout-split invariant and fuzz
-tests for commission bounds. `test/mocks/MockUSDT.sol` is a minimal EIP-3009 token mirroring the
-behavior verified against the real Whitechain testnet USDT in `docs/WHITECHAIN.md` (6 decimals,
-`receiveWithAuthorization` requires `msg.sender == to`).
+49 tests across `test/CampaignRegistry.t.sol` and `test/NumaRouter.t.sol`: unit tests for every
+access-control and validation branch, a fuzz test for the payout-split invariant, fuzz tests for
+commission bounds, and 8 tests covering the `OrderCommitment` nonce binding (see
+`docs/DECISIONS/0005-order-commitment-nonce-binding.md`) — including direct reproductions of the
+order/creator/campaign-substitution attacks it prevents, sensitivity checks for `commissionBps`/
+`feeBps`, a fuzz test confirming the commitment digest never collides with the `Order` signing
+digest, and a fixed cross-language test vector
+(`test_fixedVector_orderCommitmentMatchesCrossLanguageSpec`) with a literal hardcoded expected
+digest for independent verification against a matching TypeScript test. `test/mocks/MockUSDT.sol`
+is a minimal EIP-3009 token mirroring the behavior verified against the real Whitechain testnet
+USDT in `docs/WHITECHAIN.md` (6 decimals, `receiveWithAuthorization` requires `msg.sender == to`).
 
 ## Deployment
 
