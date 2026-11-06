@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import { createPublicClient, createWalletClient, http, parseEther, parseGwei } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { createOrderRequest, relayRequest, whitechainSepolia } from "@numa/shared";
+import { campaignRegistryAbi, createOrderRequest, numaRouterAbi, relayRequest, whitechainSepolia } from "@numa/shared";
 import { loadEnv, type Env } from "./config/env.js";
 import { OrderSigner } from "@numa/sdk-server";
 import { Relayer, RelayError } from "./services/relayer.js";
@@ -29,7 +29,7 @@ export function buildServer(env: Env) {
   } else app.log.warn("DATABASE_URL not set: relayer limits and indexer cursor are in-memory");
   const relayer = new Relayer(
     {
-      router: env.NUMA_ROUTER_ADDRESS, chainId: env.WHITECHAIN_CHAIN_ID,
+      router: env.NUMA_ROUTER_ADDRESS, registry: env.CAMPAIGN_REGISTRY_ADDRESS, chainId: env.WHITECHAIN_CHAIN_ID,
       maxGasPriceWei: parseGwei(String(env.RELAYER_MAX_GAS_PRICE_GWEI)),
       dailyCapWei: parseEther(String(env.RELAYER_DAILY_CAP_WBT)),
       perAddressDailyLimit: env.RELAYER_PER_ADDRESS_DAILY_LIMIT,
@@ -48,14 +48,22 @@ export function buildServer(env: Env) {
   }));
 
   // Demo merchant order service. Real merchants sign orders in their own backend via @numa/sdk-server.
+  // Requires CAMPAIGN_REGISTRY_ADDRESS: merchant and commissionBps come from the on-chain campaign,
+  // never from the request body - a caller cannot assert its own split terms.
   app.post("/orders", async (req, reply) => {
     if (!orders) return reply.code(501).send({ error: "MERCHANT_SIGNER_KEY not configured" });
+    if (!env.CAMPAIGN_REGISTRY_ADDRESS) return reply.code(501).send({ error: "CAMPAIGN_REGISTRY_ADDRESS not configured" });
     const p = createOrderRequest.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "invalid request", issues: p.error.issues });
-    const o = await orders.createOrder(p.data);
+    const [campaign, feeBps] = await Promise.all([
+      pub.readContract({ address: env.CAMPAIGN_REGISTRY_ADDRESS, abi: campaignRegistryAbi, functionName: "getCampaign", args: [p.data.campaignId] }),
+      pub.readContract({ address: env.NUMA_ROUTER_ADDRESS, abi: numaRouterAbi, functionName: "feeBps" }),
+    ]);
+    if (!campaign.exists) return reply.code(404).send({ error: "unknown campaignId" });
+    const o = await orders.createOrder({ ...p.data, merchant: campaign.merchant, commissionBps: campaign.commissionBps, feeBps });
     return {
       order: Object.fromEntries(Object.entries(o.order).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v])),
-      digest: o.digest, merchantSig: o.merchantSig, merchant: o.merchant,
+      digest: o.digest, authNonce: o.authNonce, merchantSig: o.merchantSig, payoutSigner: o.payoutSigner,
     };
   });
 
