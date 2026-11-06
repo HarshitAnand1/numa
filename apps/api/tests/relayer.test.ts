@@ -1,30 +1,37 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { parseSignature } from "viem";
-import { deriveAuthNonce, orderDigest, orderTypedData, receiveAuthTypedData, type RelayRequest } from "@numa/shared";
+import { computeOrderCommitment, orderTypedData, receiveAuthTypedData, type RelayRequest, type Order } from "@numa/shared";
 import { Relayer, RelayError, type RelayerConfig } from "../src/services/relayer.js";
 import { MemoryRelayStore } from "../src/services/store.js";
 
 const router = "0x1111111111111111111111111111111111111111" as const;
+const registry = "0x7777777777777777777777777777777777777777" as const;
+const merchant = "0x6666666666666666666666666666666666666666" as const;
 const creator = "0x2222222222222222222222222222222222222222" as const;
 const buyerAcct = privateKeyToAccount(generatePrivateKey());
 const buyer = buyerAcct.address;
 const NOW = 1_000;
 const relayerAcct = privateKeyToAccount(generatePrivateKey());
-const merchant = privateKeyToAccount(generatePrivateKey());
-const cfg: RelayerConfig = { router, chainId: 1874, maxGasPriceWei: 100n, dailyCapWei: 10_000n, perAddressDailyLimit: 2 };
+const merchantSigner = privateKeyToAccount(generatePrivateKey());
+const COMMISSION_BPS = 1000n;
+const FEE_BPS = 50n;
+const cfg: RelayerConfig = { router, registry, chainId: 1874, maxGasPriceWei: 100n, dailyCapWei: 10_000n, perAddressDailyLimit: 2 };
 
-async function makeReq(over: Partial<RelayRequest["order"]> = {}): Promise<RelayRequest> {
-  const order = { campaignId: 1n, orderId: `0x${"01".repeat(32)}` as const, creator, amount: 5_000_000n, deadline: 2_000n, ...over };
-  const merchantSig = await merchant.signTypedData(orderTypedData(order, 1874, router));
-  const nonce = deriveAuthNonce(orderDigest(order, 1874, router), order.creator);
-  const sig = await buyerAcct.signTypedData(receiveAuthTypedData({ from: buyer, router, value: order.amount, validAfter: 0n, validBefore: 5_000n, nonce }, 1874));
+async function makeReq(over: Partial<Order> = {}): Promise<RelayRequest> {
+  const order: Order = { campaignId: 1n, merchant, creator, buyer, gross: 5_000_000n, orderId: `0x${"01".repeat(32)}` as const, deadline: 2_000n, ...over };
+  const merchantSig = await merchantSigner.signTypedData(orderTypedData(order, 1874, router));
+  const nonce = computeOrderCommitment({ ...order, commissionBps: COMMISSION_BPS, feeBps: FEE_BPS }, 1874, router);
+  const sig = await buyerAcct.signTypedData(receiveAuthTypedData({ from: buyer, router, value: order.gross, validAfter: 0n, validBefore: 5_000n, nonce }, 1874));
   const { r, s, v } = parseSignature(sig);
-  return { order, merchantSig, buyer, auth: { validAfter: 0n, validBefore: 5_000n, v: Number(v), r, s } };
+  return { order, merchantSig, auth: { validAfter: 0n, validBefore: 5_000n, v: Number(v), r, s } };
 }
 
 function setup(pubOver: Record<string, unknown> = {}) {
   const pub = {
+    readContract: vi.fn(({ functionName }: { functionName: string }) =>
+      functionName === "feeBps" ? Promise.resolve(FEE_BPS) : Promise.resolve({ merchant, payoutSigner: merchantSigner.address, commissionBps: COMMISSION_BPS, endsAt: 9_999_999n, paused: false, exists: true }),
+    ),
     getGasPrice: vi.fn().mockResolvedValue(10n),
     simulateContract: vi.fn().mockResolvedValue({ request: { foo: 1 } }),
     estimateContractGas: vi.fn().mockResolvedValue(100n),
@@ -63,7 +70,11 @@ describe("Relayer", () => {
   });
   it("rejects buyer == creator", async () => {
     const { relayer } = setup();
-    expect(await code(relayer.submit({ ...req, buyer: creator }))).toBe("BAD_SELF_PURCHASE");
+    expect(await code(relayer.submit(await makeReq({ buyer: creator })))).toBe("BAD_SELF_PURCHASE");
+  });
+  it("rejects buyer == merchant", async () => {
+    const { relayer } = setup();
+    expect(await code(relayer.submit(await makeReq({ buyer: merchant })))).toBe("BAD_SELF_PURCHASE");
   });
   it("rejects malformed merchant signature", async () => {
     const { relayer } = setup();
@@ -71,21 +82,31 @@ describe("Relayer", () => {
   });
   it("rejects an authorization signed for a different amount, recipient window or signer", async () => {
     const { relayer, pub } = setup();
-    // order amount differs from what the buyer authorized
+    // order gross differs from what the buyer authorized
     const other = await makeReq();
-    expect(await code(relayer.submit({ ...other, order: { ...other.order, amount: other.order.amount + 1n } }))).toBe("BAD_BUYER_AUTH");
+    expect(await code(relayer.submit({ ...other, order: { ...other.order, gross: other.order.gross + 1n } }))).toBe("BAD_BUYER_AUTH");
     // different validBefore than signed
     const w = await makeReq();
     expect(await code(relayer.submit({ ...w, auth: { ...w.auth, validBefore: 4_000n } }))).toBe("BAD_BUYER_AUTH");
     // signature from someone else
     const stranger = privateKeyToAccount(generatePrivateKey());
     const o = await makeReq();
-    const nonce = deriveAuthNonce(orderDigest(o.order, 1874, router), o.order.creator);
-    const bad = parseSignature(await stranger.signTypedData(receiveAuthTypedData({ from: buyer, router, value: o.order.amount, validAfter: 0n, validBefore: 5_000n, nonce }, 1874)));
+    const nonce = computeOrderCommitment({ ...o.order, commissionBps: COMMISSION_BPS, feeBps: FEE_BPS }, 1874, router);
+    const bad = parseSignature(await stranger.signTypedData(receiveAuthTypedData({ from: buyer, router, value: o.order.gross, validAfter: 0n, validBefore: 5_000n, nonce }, 1874)));
     expect(await code(relayer.submit({ ...o, auth: { ...o.auth, v: Number(bad.v), r: bad.r, s: bad.s } }))).toBe("BAD_BUYER_AUTH");
-    // rejected locally: no RPC calls were made
+    // rejected locally: no gas/simulation RPC calls were made (registry/feeBps reads happen before this point)
     expect(pub.getGasPrice).not.toHaveBeenCalled();
     expect(pub.simulateContract).not.toHaveBeenCalled();
+  });
+  it("rejects when the authNonce doesn't match the recomputed commitment (e.g. wrong on-chain commissionBps)", async () => {
+    const { relayer } = setup({
+      readContract: vi.fn(({ functionName }: { functionName: string }) =>
+        functionName === "feeBps" ? Promise.resolve(FEE_BPS) : Promise.resolve({ merchant, payoutSigner: merchantSigner.address, commissionBps: 9999n, endsAt: 9_999_999n, paused: false, exists: true }),
+      ),
+    });
+    // req's buyer authorization was signed against COMMISSION_BPS=1000n, but this registry mock
+    // reports a different commissionBps - the recomputed commitment won't match the buyer's nonce.
+    expect(await code(relayer.submit(req))).toBe("BAD_BUYER_AUTH");
   });
   it("rejects malformed auth signature values", async () => {
     const { relayer } = setup();

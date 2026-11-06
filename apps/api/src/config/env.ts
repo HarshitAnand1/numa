@@ -11,8 +11,11 @@ const schema = z.object({
   WHITECHAIN_RPC_URL: z.string().url().refine((u) => u.startsWith("https://"), "RPC must be https"),
   WHITECHAIN_CHAIN_ID: z.coerce.number().default(1874),
   NUMA_ROUTER_ADDRESS: addr,
-  /** CampaignRegistry address; lets the API verify that Arkiv campaigns/invites come from the on-chain merchant. */
-  CAMPAIGN_REGISTRY_ADDRESS: addr.optional(),
+  /** CampaignRegistry address. Required: the relayer reads `getCampaign(campaignId).commissionBps`
+   * from here to independently recompute the expected OrderCommitment (see
+   * docs/DECISIONS/0005-order-commitment-nonce-binding.md) - it never trusts a caller-supplied
+   * nonce. Also lets the API verify that Arkiv campaigns/invites come from the on-chain merchant. */
+  CAMPAIGN_REGISTRY_ADDRESS: addr,
   RELAYER_PRIVATE_KEY: key,
   MERCHANT_SIGNER_KEY: key.optional(),
   RELAYER_MAX_GAS_PRICE_GWEI: z.coerce.number().positive(),

@@ -24,15 +24,17 @@ export function registerDiscoveryRoutes(app: FastifyInstance, d: DiscoveryDeps) 
   const now = d.now ?? (() => Math.floor(Date.now() / 1000));
   const merchantCache = new Map<string, Address | null>();
 
-  /** On-chain merchant of a campaign (the authority). null when no registry is configured or the read fails. */
+  /** On-chain merchant of a campaign (the authority). null when no registry is configured or the read fails.
+   * CampaignRegistry has no `merchantOf` function - the merchant is a field on the `Campaign`
+   * tuple returned by `getCampaign`. See docs/PROJECT_STATUS.md -> "Interface reconciliation". */
   async function merchantOf(campaignId: bigint): Promise<Address | null> {
     if (!d.registry) return null;
     const k = campaignId.toString();
     if (merchantCache.has(k)) return merchantCache.get(k)!;
     try {
-      const m = (await d.pub.readContract({ address: d.registry, abi: campaignRegistryAbi, functionName: "merchantOf", args: [campaignId] })) as Address;
-      merchantCache.set(k, m);
-      return m;
+      const campaign = await d.pub.readContract({ address: d.registry, abi: campaignRegistryAbi, functionName: "getCampaign", args: [campaignId] });
+      merchantCache.set(k, campaign.merchant);
+      return campaign.merchant;
     } catch { return null; }
   }
   const owns = async (owner: string, campaignId: bigint) => {

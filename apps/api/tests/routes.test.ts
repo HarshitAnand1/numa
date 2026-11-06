@@ -17,8 +17,8 @@ const settledLog = () => {
   const item = getAbiItem({ abi: numaRouterAbi, name: "OrderSettled" });
   return {
     address: router, blockNumber: 10n, transactionHash: txHash, logIndex: 0, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false,
-    topics: encodeEventTopics({ abi: [item], eventName: "OrderSettled", args: { orderId, campaignId: 7n, creator } }),
-    data: encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [merchant, "0x0000000000000000000000000000000000000009", 100_000_000n, 89_500_000n, 10_000_000n, 500_000n]),
+    topics: encodeEventTopics({ abi: [item], eventName: "OrderSettled", args: { orderId, campaignId: 7n, merchant } }),
+    data: encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [creator, "0x0000000000000000000000000000000000000009", 100_000_000n, 89_500_000n, 10_000_000n, 500_000n]),
   };
 };
 
@@ -41,7 +41,7 @@ const conv = { $key: "0xv", creator: { value: creator }, merchant: { value: merc
 function app(rows: Record<string, unknown[]>, opts: { registryMerchant?: string } = {}) {
   const pub = {
     getTransactionReceipt: vi.fn().mockResolvedValue({ status: "success", logs: [settledLog()], blockNumber: 10n }),
-    readContract: vi.fn().mockResolvedValue(opts.registryMerchant ?? merchant),
+    readContract: vi.fn().mockResolvedValue({ merchant: opts.registryMerchant ?? merchant, payoutSigner: merchant, commissionBps: 800n, endsAt: 9_999_999_999n, paused: false, exists: true }),
   } as never;
   const a = Fastify();
   registerDiscoveryRoutes(a, { arkiv: fakeArkiv(rows), pub, router, writer, ...(opts.registryMerchant !== undefined || true ? { registry } : {}), cache: new Map(), now: () => 1_000 });
