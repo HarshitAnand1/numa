@@ -1,5 +1,5 @@
 # Negotiation agents (design)
-Status: **backend built and tested; not yet run against a deployed registry or with a real LLM key; no UI.** See `docs/DECISIONS/0006-negotiation-agents.md`. Anything not marked verified below is not verified.
+Status: **backend built and tested; not yet run against a deployed registry or with a real LLM key; no UI.** See `docs/DECISIONS/0008-negotiation-agents.md`. Anything not marked verified below is not verified.
 
 ## Goal
 A creator and a merchant can each switch on an agent that negotiates the commission rate over Arkiv while they are away, inside limits only the owner knows. The deal still ends in a normal on-chain approval and a real USDT sale.
@@ -30,7 +30,7 @@ Hard rules (engine): never go outside the owner's floor/ceiling; never exceed th
 3. A message counts only if its `$owner` is the principal, or an agent wallet with a live `numa.agent` binding owned by that principal for that role.
 
 ## From deal to money
-The rate lives on the campaign, not on the creator (ADR 0006). The ticket offers two merchant-signed paths: (a) an existing campaign with the same `commissionBps` → `approveCreator(campaignId, creator)`; (b) `createCampaign(payoutSigner, agreedBps, endsAt)` then `approveCreator(newId, creator)`. The agent never signs either.
+The rate lives on the campaign, not on the creator (ADR 0008). The ticket offers two merchant-signed paths: (a) an existing campaign with the same `commissionBps` → `approveCreator(campaignId, creator)`; (b) `createCampaign(payoutSigner, agreedBps, endsAt)` then `approveCreator(newId, creator)`. The agent never signs either.
 
 ## Security
 Agent wallets hold only tGLM for Arkiv writes. Guardrails are private. Counterparty notes are untrusted text and never reach the decision engine. The LLM can be absent or refuse without changing outcomes.
