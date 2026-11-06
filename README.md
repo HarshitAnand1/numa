@@ -44,6 +44,13 @@ pnpm --filter @numa/web dev     # frontend; falls back to labelled demo data if 
 ```
 Running the API needs router and registry addresses and a relayer key, which exist only after a deployment: see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) and [`docs/DEPLOYMENT_CHECKLIST.md`](docs/DEPLOYMENT_CHECKLIST.md).
 
+## Whitechain (hackathon track fit)
+Primary fit: **Scale · Payments Nobody Notices** (gasless USDT checkout, merchant-covered gas, our own relayer); also **Operate** (drop-in checkout with refunds).
+
+**Why this needs on-chain USDT settlement on Whitechain:** the payment, the three-way split (merchant, creator commission, protocol fee) and the held-then-released commission are enforced by one atomic contract transaction, so a creator can prove a sale from the public chain without trusting the merchant or the platform. A card or bank rail cannot split one payment to an unaffiliated third party at settlement, hold their share against a refund window, or give anyone a publicly checkable receipt.
+
+**Current state against the track requirements** (full checklist in [`docs/WHITECHAIN.md`](docs/WHITECHAIN.md)): contracts are **not deployed yet** and there is **no settled-USDT explorer link yet**; both will be added here as soon as they exist. Feedback for the Whitechain team: [`WHITECHAIN_FEEDBACK.md`](WHITECHAIN_FEEDBACK.md).
+
 ## Arkiv (hackathon track: Build on Arkiv)
 Marketplace data lives in wallet-owned Arkiv entities on Rabdi (chain 7794095). Submission files: [`schema`](arkiv/schema.md) (entities, indexes, owners, expiry), [`how-you-use-arkiv`](arkiv/how-you-use-arkiv.md), [`why-arkiv`](arkiv/why-arkiv.md), [`reach`](arkiv/reach.md), [`friction`](arkiv/friction.md).
 - **Writer wallets:** the numa writer is `0x53FFc438d1389087e0159F024C2C85cC08eA32B3`; the demo merchant and creator wallets are listed in `arkiv/schema.md`.
