@@ -1,47 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "./api/client";
-import { addressUrl, ago, bpsToPercent, formatUsdt, shortAddress, txUrl } from "./api/format";
+import { addressUrl, ago, formatUsdt, shortAddress, txUrl } from "./api/format";
 import { DEMO_CREATOR, demoCampaigns, demoCreatorCard, demoLeaderboard, demoTrending } from "./api/mock";
 import { DataBadge, useResource } from "./api/useResource";
 import { toCampaignView, type CampaignView } from "./api/view";
-
-type View =
-  | "home"
-  | "how"
-  | "campaigns"
-  | "campaignDetail"
-  | "creator"
-  | "leaderboard"
-  | "creatorApp"
-  | "merchant"
-  | "checkout"
-  | "demo"
-  | "verify"
-  | "system"
-  | "handoff";
-
-const viewPaths: Record<View, string> = {
-  home: "/",
-  how: "/how-it-works",
-  campaigns: "/campaigns",
-  campaignDetail: "/campaigns/SP-008",
-  creator: "/creators/0x71c9d03a",
-  leaderboard: "/leaderboard",
-  creatorApp: "/creator",
-  merchant: "/merchant",
-  checkout: "/pay/RIO-08-X",
-  demo: "/demo-shop",
-  verify: "/verify",
-  system: "/system-states",
-  handoff: "/design-handoff",
-};
-
-function viewFromPath(path: string): View {
-  if (/^\/campaigns\/[^/]+/.test(path)) return "campaignDetail";
-  if (/^\/creators\/[^/]+/.test(path)) return "creator";
-  if (/^\/pay\/[^/]+/.test(path) || /^\/receipt\//.test(path)) return "checkout";
-  return (Object.entries(viewPaths).find(([, value]) => value === path)?.[0] as View) || "home";
-}
+import { parseRoute, routeToPath, titleFor, type Route, type View } from "./routes";
 
 /**
  * Demo campaigns for the creator/merchant dashboards, which are not wired to the API yet
@@ -671,12 +634,15 @@ function Marquees() {
   );
 }
 
-function SplitCalculator({ compact = false }: { compact?: boolean }) {
+function SplitCalculator({ compact = false, initialCommission }: { compact?: boolean; initialCommission?: number }) {
   const [price, setPrice] = useState(compact ? 25 : 50);
-  const [commission, setCommission] = useState(compact ? 18 : 20);
-  const fee = Math.floor(price * 0.01 * 100) / 100;
-  const creator = Math.floor(price * commission) / 100;
-  const merchant = Math.round((price - creator - fee) * 100) / 100;
+  const [commission, setCommission] = useState(initialCommission ?? (compact ? 18 : 20));
+  // Same integer math as NumaRouter: amounts in 6-dp base units, each share rounded down.
+  // The fee is shown at the 1% protocol maximum; the deployed feeBps is a router constructor argument.
+  const grossBase = BigInt(Math.round(price * 100)) * 10_000n;
+  const creatorBase = (grossBase * BigInt(Math.round(commission * 100))) / 10_000n;
+  const feeBase = (grossBase * 100n) / 10_000n;
+  const merchantBase = grossBase - creatorBase - feeBase;
   return (
     <div className={`split-calc ${compact ? "compact" : ""}`}>
       {!compact && (
@@ -702,6 +668,7 @@ function SplitCalculator({ compact = false }: { compact?: boolean }) {
             type="range"
             min="1"
             max="50"
+            step="0.5"
             value={commission}
             onChange={(e) => setCommission(+e.target.value)}
           />
@@ -720,17 +687,17 @@ function SplitCalculator({ compact = false }: { compact?: boolean }) {
         <div className="split-results">
           <div className="merchant-result">
             <span>merchant / instant</span>
-            <strong>{merchant.toFixed(2)}</strong>
+            <strong>{formatUsdt(merchantBase)}</strong>
             <small>USDT</small>
           </div>
           <div className="creator-result">
             <span>creator / held</span>
-            <strong>{creator.toFixed(2)}</strong>
-            <small>USDT · releases in 7d</small>
+            <strong>{formatUsdt(creatorBase)}</strong>
+            <small>USDT · held until the refund window ends</small>
           </div>
           <div className="fee-result">
             <span>protocol / ≤1%</span>
-            <strong>{fee.toFixed(2)}</strong>
+            <strong>{formatUsdt(feeBase)}</strong>
             <small>USDT</small>
           </div>
         </div>
@@ -1045,7 +1012,12 @@ function CampaignRow({ campaign: c, rank }: { campaign: CampaignView; rank: numb
   return (
     <button
       className="campaign-row"
-      onClick={() => window.dispatchEvent(new CustomEvent("nav", { detail: "campaignDetail" }))}
+      data-cursor="OPEN →"
+      onClick={() =>
+        window.dispatchEvent(
+          new CustomEvent("nav", { detail: { view: "campaignDetail", campaignId: c.campaignId } }),
+        )
+      }
     >
       <span className="row-rank">{String(rank).padStart(2, "0")}</span>
       <span className="row-name">
@@ -1486,7 +1458,7 @@ function Checkout() {
               <div className="attribution">
                 <span>CREATOR ATTRIBUTION</span>
                 <strong>rio.santos / 0x71…d03</strong>
-                <i>18% commission · held 7 days</i>
+                <i>18% commission · held until the refund window ends</i>
               </div>
               <details>
                 <summary>
@@ -1576,89 +1548,342 @@ function Checkout() {
   );
 }
 
-function CampaignDetail() {
+/** "NO SLEEP / DROP 08" -> ["NO SLEEP", "DROP 08"]; otherwise split the words in half. */
+function splitTitle(name: string): [string, string] {
+  if (name.includes(" / ")) {
+    const [a, ...rest] = name.split(" / ");
+    return [a, rest.join(" / ")];
+  }
+  const w = name.split(" ");
+  const mid = Math.ceil(w.length / 2);
+  return [w.slice(0, mid).join(" "), w.slice(mid).join(" ")];
+}
+
+function CampaignDetail({ campaignId }: { campaignId?: string }) {
   const [offerOpen, setOfferOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [ask, setAsk] = useState(18);
-  const [signed, setSigned] = useState(false);
+  const [previewed, setPreviewed] = useState(false);
+  const [channel, setChannel] = useState("");
+  const [audience, setAudience] = useState("");
+  const [reach, setReach] = useState(12000);
+  const list = useResource(
+    (s) => api.campaigns({ limit: 100 }, s),
+    () => demoCampaigns(),
+    [],
+  );
+  const hot = useResource(
+    (s) => api.trending(100, s),
+    () => demoTrending(),
+    [],
+  );
+  const found = (list.data ?? []).find((c) => c.campaignId === campaignId);
+  const goCampaigns = () => window.dispatchEvent(new CustomEvent("nav", { detail: "campaigns" }));
+
+  if (!found) {
+    return (
+      <main className="page detail-page">
+        <section className="campaign-poster">
+          <div className="campaign-back">
+            <button onClick={goCampaigns}>← ALL CAMPAIGNS</button>
+            <DataBadge status={list.status} reason={list.reason} />
+          </div>
+          <div className="campaign-title">
+            <h1>
+              {list.status === "loading" ? (
+                <>
+                  ASKING
+                  <br />
+                  <em>ARKIV…</em>
+                </>
+              ) : (
+                <>
+                  NOT AN ACTIVE
+                  <br />
+                  <em>CAMPAIGN.</em>
+                </>
+              )}
+            </h1>
+            {list.status !== "loading" && (
+              <p>
+                Campaign #{campaignId} isn’t listed on Arkiv right now. It may have ended, been
+                paused, or never been published. Ended campaigns drop out of discovery.
+              </p>
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const v = toCampaignView(found, (hot.data ?? []).find((t) => t.campaign.campaignId === found.campaignId)?.offerCount ?? 0);
+  const [titleA, titleB] = splitTitle(v.name);
+  const maxPct = Math.max(1, Math.floor(v.commission));
+  const myAsk = Math.min(ask, maxPct);
+  const endDate = new Date(found.endsAt * 1000)
+    .toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+    .toUpperCase();
+  const canContinue = step !== 1 || (!!channel && audience.trim().length >= 10);
   return (
     <main className="page detail-page">
       <section className="campaign-poster">
         <div className="campaign-back">
-          <button
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent("nav", { detail: "campaigns" }))
-            }
-          >
-            ← ALL CAMPAIGNS
-          </button>
-          <span>SP-008 / ACTIVE</span>
+          <button onClick={goCampaigns}>← ALL CAMPAIGNS</button>
+          <span>
+            {v.id} / {found.status.toUpperCase()} · <DataBadge status={list.status} reason={list.reason} />
+          </span>
         </div>
         <div className="poster-noise" aria-hidden="true">
-          08
+          {v.campaignId.slice(-2).padStart(2, "0")}
         </div>
         <div className="campaign-title">
-          <VerificationBadge state="verified" />
+          <VerificationBadge state={v.verified} />
           <h1>
-            NO SLEEP
-            <br />
-            <em>DROP 08.</em>
+            {titleA}
+            {titleB && (
+              <>
+                <br />
+                <em>{titleB}.</em>
+              </>
+            )}
           </h1>
-          <p>
-            reflective footwear for people who consider sunrise a deadline. Global campaign by NULL
-            OBJECTS.
-          </p>
+          <p>{found.description || "The merchant hasn’t published a brief for this campaign."}</p>
         </div>
         <div className="campaign-ask">
           <span>CREATOR COMMISSION</span>
-          <strong>18%</strong>
-          <small>MAX 20% · 42 LIVE OFFERS</small>
+          <strong>{v.commissionLabel}</strong>
+          <small>
+            MAX {v.commissionLabel} · {v.offers} LIVE OFFERS
+          </small>
           <button onClick={() => setOfferOpen(true)}>
             SUBMIT AN OFFER <Icon name="arrow" />
           </button>
         </div>
       </section>
       <section className="campaign-terms">
-        <div><span>REGION</span><b>GLOBAL</b></div>
-        <div><span>ENDS IN</span><b>2d 14h 08m</b></div>
-        <div><span>REFUND WINDOW</span><b>7 DAYS</b></div>
-        <div><span>STATUS</span><b className="green-copy">● ACTIVE</b></div>
+        <div>
+          <span>REGION</span>
+          <b>{v.region.toUpperCase()}</b>
+        </div>
+        <div>
+          <span>ENDS IN</span>
+          <b>{v.ends}</b>
+        </div>
+        <div>
+          <span>REFUND WINDOW</span>
+          <b>SET BY ROUTER</b>
+        </div>
+        <div>
+          <span>STATUS</span>
+          <b className="green-copy">● {found.status.toUpperCase()}</b>
+        </div>
       </section>
       <section className="campaign-body">
         <div className="campaign-copy">
-          <span>THE BRIEF / ARKIV-SYNCED</span>
-          <h2>make night look like the sensible option.</h2>
+          <span>THE RULES / APPLY TO EVERY CAMPAIGN</span>
+          <h2>commission is paid when a real sale settles.</h2>
           <p>
-            Show the Afterimage Runner in motion after dark. Product must be visible, but a product
-            close-up is not a personality. Short video and editorial photography preferred.
+            Your attribution link points to this campaign. If a buyer pays USDT through it, the
+            router settles the sale on Whitechain and holds your commission until the refund window
+            ends. Clicks, views and impressions earn nothing.
           </p>
           <div className="do-dont">
-            <div><b>DO</b><p>show real use, disclose the relationship, link the exact product.</p></div>
-            <div><b>DON’T</b><p>buy your own link, promise medical benefits, or submit bot traffic as a personality trait.</p></div>
+            <div>
+              <b>DO</b>
+              <p>show real use, disclose the relationship, link the exact product.</p>
+            </div>
+            <div>
+              <b>DON’T</b>
+              <p>buy your own link, promise things the product can’t do, or submit bot traffic.</p>
+            </div>
           </div>
           <div className="campaign-timeline">
-            {["campaign registered","offers close","campaign ends","last commission releases"].map((x,i)=><div key={x}><i className={i===0?"done":""}/><span>{x}</span><small>{["APR 03","APR 21","APR 24","MAY 01"][i]}</small></div>)}
+            <div>
+              <i className="done" />
+              <span>campaign live</span>
+              <small>NOW</small>
+            </div>
+            <div>
+              <i />
+              <span>campaign ends</span>
+              <small>{endDate}</small>
+            </div>
           </div>
         </div>
-        <aside className="detail-calc"><h3>what one sale does.</h3><SplitCalculator compact/><p><Icon name="check"/> Money state is read from Whitechain.</p><p className="arkiv-sync"><i/> Listing terms synced from Arkiv 18s ago.</p></aside>
+        <aside className="detail-calc">
+          <h3>what one sale does.</h3>
+          <SplitCalculator compact initialCommission={v.commission} />
+          <p>
+            <Icon name="check" /> Money state is read from Whitechain.
+          </p>
+          <p className="arkiv-sync">
+            <i /> Listing terms are read from Arkiv.
+          </p>
+        </aside>
       </section>
       {offerOpen && (
         <div className="offer-modal" role="dialog" aria-modal="true" aria-label="Submit offer">
           <button className="modal-scrim" onClick={() => setOfferOpen(false)} aria-label="Close" />
           <section>
-            <div className="offer-modal-head"><div><span>NO SLEEP / DROP 08</span><h2>{signed ? "offer published." : "make your ask."}</h2></div><button onClick={() => setOfferOpen(false)}><Icon name="close"/></button></div>
-            {!signed ? <>
-              <div className="offer-progress">{["channel + audience","commission + reach","review + sign"].map((x,i)=><button onClick={()=>setStep(i+1)} className={step===i+1?"active":step>i+1?"done":""} key={x}><i>{step>i+1?"✓":i+1}</i>{x}</button>)}</div>
-              <div className="offer-form">
-                {step===1&&<><label>CHANNEL<select defaultValue=""><option value="" disabled>choose a channel</option><option>short video</option><option>newsletter</option><option>live stream</option></select><small>where the product will actually appear.</small></label><label>AUDIENCE<textarea placeholder="night runners, streetwear collectors, camera people who stay out too late" /></label><div className="validation-note">Keep this specific. “everyone” is not an audience.</div></>}
-                {step===2&&<><label className="ask-slider">YOUR ASK<strong>{ask}% <small>{ask*100} BPS</small></strong><input type="range" min="1" max="20" value={ask} onChange={e=>setAsk(+e.target.value)}/><span>campaign maximum: 20%</span></label><label>EXPECTED REACH<input type="number" defaultValue="12000"/><small>an estimate, not a settlement. it does not affect earnings.</small></label></>}
-                {step===3&&<div className="offer-review"><div><span>CHANNEL</span><b>short video</b></div><div><span>AUDIENCE</span><b>night runners + streetwear</b></div><div><span>ASK</span><b>{ask}% / {ask*100} BPS</b></div><div><span>EXPECTED REACH</span><b>12,000</b></div><aside><b>ARKIV WRITE / tGLM REQUIRED</b><p>Your wallet signs an entity publish. This does not move USDT.</p><button>NEED TEST GAS? OPEN FAUCET ↗</button></aside></div>}
+            <div className="offer-modal-head">
+              <div>
+                <span>{v.name}</span>
+                <h2>{previewed ? "preview only." : "make your ask."}</h2>
               </div>
-              <div className="offer-modal-actions"><button disabled={step===1} onClick={()=>setStep(step-1)}>BACK</button><button className="hard-button" onClick={()=>step<3?setStep(step+1):setSigned(true)}>{step<3?"CONTINUE":"REVIEW + SIGN"} <Icon name="arrow"/></button></div>
-            </>:<div className="offer-success"><Stamp tone="green">PUBLISHED</Stamp><strong>71h 59m</strong><span>until this offer expires</span><p>Arkiv accepted your offer. The merchant can now approve or reject it. Approval will require a separate Whitechain transaction.</p><div><Icon name="check"/> entity owner matches 0x71c…d03a</div><button onClick={()=>setOfferOpen(false)}>DONE</button></div>}
+              <button onClick={() => setOfferOpen(false)} aria-label="Close">
+                <Icon name="close" />
+              </button>
+            </div>
+            {!previewed ? (
+              <>
+                <div className="offer-progress">
+                  {["channel + audience", "commission + reach", "review"].map((x, i) => (
+                    <button
+                      onClick={() => setStep(i + 1)}
+                      className={step === i + 1 ? "active" : step > i + 1 ? "done" : ""}
+                      key={x}
+                    >
+                      <i>{step > i + 1 ? "✓" : i + 1}</i>
+                      {x}
+                    </button>
+                  ))}
+                </div>
+                <div className="offer-form">
+                  {step === 1 && (
+                    <>
+                      <label>
+                        CHANNEL
+                        <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+                          <option value="" disabled>
+                            choose a channel
+                          </option>
+                          <option>short video</option>
+                          <option>newsletter</option>
+                          <option>live stream</option>
+                        </select>
+                        <small>where the product will actually appear.</small>
+                      </label>
+                      <label>
+                        AUDIENCE
+                        <textarea
+                          value={audience}
+                          onChange={(e) => setAudience(e.target.value)}
+                          placeholder="who actually watches you, and why they’d buy this"
+                        />
+                      </label>
+                      <div className="validation-note">
+                        Keep this specific (10+ characters). “everyone” is not an audience.
+                      </div>
+                    </>
+                  )}
+                  {step === 2 && (
+                    <>
+                      <label className="ask-slider">
+                        YOUR ASK
+                        <strong>
+                          {myAsk}% <small>{myAsk * 100} BPS</small>
+                        </strong>
+                        <input
+                          type="range"
+                          min="1"
+                          max={maxPct}
+                          value={myAsk}
+                          onChange={(e) => setAsk(+e.target.value)}
+                        />
+                        <span>campaign maximum: {v.commissionLabel}</span>
+                      </label>
+                      <label>
+                        EXPECTED REACH
+                        <input
+                          type="number"
+                          min="0"
+                          value={reach}
+                          onChange={(e) => setReach(Math.max(0, +e.target.value))}
+                        />
+                        <small>an estimate, not a settlement. it does not affect earnings.</small>
+                      </label>
+                    </>
+                  )}
+                  {step === 3 && (
+                    <div className="offer-review">
+                      <div>
+                        <span>CHANNEL</span>
+                        <b>{channel || "—"}</b>
+                      </div>
+                      <div>
+                        <span>AUDIENCE</span>
+                        <b>{audience.trim() || "—"}</b>
+                      </div>
+                      <div>
+                        <span>ASK</span>
+                        <b>
+                          {myAsk}% / {myAsk * 100} BPS
+                        </b>
+                      </div>
+                      <div>
+                        <span>EXPECTED REACH</span>
+                        <b>{reach.toLocaleString("en-US")}</b>
+                      </div>
+                      <aside>
+                        <b>ARKIV WRITE / tGLM REQUIRED</b>
+                        <p>
+                          Publishing will need your wallet to sign an entity publish. It never
+                          moves USDT. Wallet signing isn’t built yet.
+                        </p>
+                      </aside>
+                    </div>
+                  )}
+                </div>
+                <div className="offer-modal-actions">
+                  <button disabled={step === 1} onClick={() => setStep(step - 1)}>
+                    BACK
+                  </button>
+                  <button
+                    className="hard-button"
+                    disabled={!canContinue}
+                    onClick={() => (step < 3 ? setStep(step + 1) : setPreviewed(true))}
+                  >
+                    {step < 3 ? "CONTINUE" : "PREVIEW OFFER"} <Icon name="arrow" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="offer-success">
+                <Stamp>NOT PUBLISHED</Stamp>
+                <strong>preview</strong>
+                <span>no wallet is connected</span>
+                <p>
+                  Nothing was written to Arkiv and no merchant was notified. Publishing an offer
+                  will need a wallet signature and test gas (tGLM) on Arkiv.
+                </p>
+                <button onClick={() => setOfferOpen(false)}>DONE</button>
+              </div>
+            )}
           </section>
         </div>
       )}
+    </main>
+  );
+}
+
+function NotFound() {
+  return (
+    <main className="page">
+      <div className="page-poster">
+        <span className="poster-code">404 / NO SUCH ROUTE</span>
+        <h1>
+          THE BOTS GOT
+          <br />
+          <em>LOST HERE.</em>
+        </h1>
+        <p>There’s no page at this address. Real sales are over this way.</p>
+        <button
+          className="hard-button"
+          onClick={() => window.dispatchEvent(new CustomEvent("nav", { detail: "home" }))}
+        >
+          TAKE ME HOME <Icon name="arrow" />
+        </button>
+      </div>
     </main>
   );
 }
@@ -1964,7 +2189,7 @@ function CreatorApp() {
     ) : tab === "discover" || tab === "offers" ? (
       <section className="app-panel creator-discover">
         <div className="panel-title"><div><span>{tab === "offers" ? "YOUR OFFERS / 03" : "DISCOVER / TRENDING"}</span><h2>{tab === "offers" ? <>waiting is part<br/>of the pitch.</> : <>pick something<br/>you’d actually use.</>}</h2></div><button className="outline-button">FILTER</button></div>
-        {campaigns.map((c,i)=><div className="creator-campaign-row" key={c.id}><span>0{i+1}</span><div><small>{c.category} / {c.region}</small><h3>{c.name}</h3><VerificationBadge state={c.verified}/></div><div><small>{tab==="offers"?"YOUR ASK":"COMMISSION"}</small><b>{tab==="offers"?Math.max(10,c.commission-2):c.commission}%</b></div><div><small>{tab==="offers"?"EXPIRES":"ENDS IN"}</small><b>{tab==="offers"?["18h","2d 3h","2d 11h","expired"][i]:c.ends}</b></div><button onClick={()=>window.dispatchEvent(new CustomEvent("nav",{detail:"campaignDetail"}))}>{tab==="offers"?"VIEW":"OFFER"} <Icon name="arrow"/></button></div>)}
+        {campaigns.map((c,i)=><div className="creator-campaign-row" key={c.id}><span>0{i+1}</span><div><small>{c.category} / {c.region}</small><h3>{c.name}</h3><VerificationBadge state={c.verified}/></div><div><small>{tab==="offers"?"YOUR ASK":"COMMISSION"}</small><b>{tab==="offers"?Math.max(10,c.commission-2):c.commission}%</b></div><div><small>{tab==="offers"?"EXPIRES":"ENDS IN"}</small><b>{tab==="offers"?["18h","2d 3h","2d 11h","expired"][i]:c.ends}</b></div><button onClick={()=>window.dispatchEvent(new CustomEvent("nav",{detail:{view:"campaignDetail",campaignId:c.campaignId}}))}>{tab==="offers"?"VIEW":"OFFER"} <Icon name="arrow"/></button></div>)}
       </section>
     ) : tab === "links" ? (
       <section className="app-panel links-panel">
@@ -2839,12 +3064,15 @@ function Footer({ setView }: { setView: (v: View) => void }) {
   );
 }
 
+type Extra = { creator?: string; campaignId?: string };
+
 export default function App() {
-  const [view, setViewState] = useState<View>("home");
-  const [creator, setCreator] = useState<string | undefined>(undefined);
+  // The URL is the source of truth on load; afterwards navigation pushes history entries.
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
+  const view = route.view;
   const [intro, setIntro] = useState<"on" | "out" | "done">(reducedMotion() ? "done" : "on");
   const [wipe, setWipe] = useState<"idle" | "in" | "out">("idle");
-  const viewRef = useRef<View>("home");
+  const routeRef = useRef<Route>(route);
   const ready = intro !== "on";
 
   // Intro: wordmark draws in (~1.4s), curtain lifts, then the hero choreography starts.
@@ -2858,16 +3086,27 @@ export default function App() {
     };
   }, [intro]);
 
+  useEffect(() => {
+    document.title = titleFor(route.view);
+  }, [route.view]);
+
   // Page transition: black wipe up from the bottom, swap the view under it, wipe away.
-  const setView = (v: View, creatorAddr?: string) => {
-    if (v === viewRef.current && creatorAddr === undefined) {
+  const setView = (v: View, extra: Extra = {}) => {
+    const next: Route = { view: v, ...extra };
+    const cur = routeRef.current;
+    if (
+      next.view === cur.view &&
+      next.creator === cur.creator &&
+      next.campaignId === cur.campaignId
+    ) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     const swap = () => {
-      viewRef.current = v;
-      setViewState(v);
-      setCreator(creatorAddr); // undefined for every navigation that doesn't carry an address
+      routeRef.current = next;
+      setRoute(next); // params default to undefined for navigations that don't carry them
+      const path = routeToPath(next);
+      if (path !== window.location.pathname) window.history.pushState(null, "", path);
       window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     };
     if (reducedMotion()) {
@@ -2883,18 +3122,26 @@ export default function App() {
   };
   const setViewRef = useRef(setView);
   setViewRef.current = setView;
+
   useEffect(() => {
-    const handler = (e: Event) => {
-      const d = (e as CustomEvent<View | { view: View; creator?: string }>).detail;
-      if (typeof d === "string") {
-        setViewRef.current(d);
-      } else {
-        // a creator address travels with the navigation so /creators/:address can load it
-        setViewRef.current(d.view, d.creator);
-      }
+    const onNav = (e: Event) => {
+      const d = (e as CustomEvent<View | ({ view: View } & Extra)>).detail;
+      if (typeof d === "string") setViewRef.current(d);
+      else setViewRef.current(d.view, { creator: d.creator, campaignId: d.campaignId });
     };
-    window.addEventListener("nav", handler);
-    return () => window.removeEventListener("nav", handler);
+    // Back / forward: swap immediately (no curtain), without pushing a new entry.
+    const onPop = () => {
+      const next = parseRoute(window.location.pathname);
+      routeRef.current = next;
+      setRoute(next);
+      window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    };
+    window.addEventListener("nav", onNav);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("nav", onNav);
+      window.removeEventListener("popstate", onPop);
+    };
   }, []);
 
   useScrollMotion(view, intro !== "on");
@@ -2910,7 +3157,8 @@ export default function App() {
       {view === "home" && <Home setView={setView} ready={ready} />}
       {view === "how" && <HowItWorks />}
       {view === "campaigns" && <Campaigns />}
-      {view === "creator" && <Creator address={creator} />}
+      {view === "campaignDetail" && <CampaignDetail campaignId={route.campaignId} />}
+      {view === "creator" && <Creator address={route.creator} />}
       {view === "leaderboard" && <Leaderboard />}
       {view === "creatorApp" && <CreatorApp />}
       {view === "merchant" && <MerchantApp />}
@@ -2918,6 +3166,7 @@ export default function App() {
       {view === "demo" && <DemoShop />}
       {view === "verify" && <Verify />}
       {view === "system" && <SystemStates />}
+      {view === "notFound" && <NotFound />}
       {view !== "checkout" && view !== "demo" && <Footer setView={setView} />}
     </div>
   );
