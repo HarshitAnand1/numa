@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "live:check": "node --env-file=../../.env --import tsx scripts/live-check.ts",
+    "query:example": "node --env-file=../../.env --import tsx scripts/example-query.ts",
     "seed:demo": "node --env-file=../../.env --import tsx scripts/seed-demo.ts"
   },
   "dependencies": {
