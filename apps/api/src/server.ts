@@ -13,11 +13,13 @@ import { migrate } from "./db/migrate.js";
 import { PgCursorStore, PgRelayStore } from "./db/pgStore.js";
 import { createArkivReader, createArkivWriter } from "@numa/arkiv";
 import { arkivConversionSink } from "./integrations/arkivSink.js";
-import { Indexer, MemoryCursor } from "./services/indexer.js";
+import { Indexer, MemoryCursor, noopSink } from "./services/indexer.js";
+import { ReleaseKeeper } from "./services/keeper.js";
+import { MemoryReleaseQueue } from "./services/releaseQueue.js";
 import { registerDiscoveryRoutes } from "./routes/discovery.js";
 import { registerClickRoutes, type ClickDeps } from "./routes/clicks.js";
 import { MemoryClickStore } from "./services/clicks.js";
-import { PgClickStore } from "./db/pgStore.js";
+import { PgClickStore, PgReleaseQueue } from "./db/pgStore.js";
 import { creatorReputation } from "./services/reputationService.js";
 import { resolveLink } from "@numa/arkiv";
 
@@ -112,22 +114,42 @@ export function buildServer(env: Env) {
   let linkOwnedBy: ClickDeps["linkOwnedBy"];
   let settledFor: ClickDeps["settledFor"];
 
-  // Arkiv-backed features (conversion indexer + reputation) need the Numa writer wallet.
-  if (env.ARKIV_WRITER_PRIVATE_KEY) {
-    const writerAccount = privateKeyToAccount(env.ARKIV_WRITER_PRIVATE_KEY as `0x${string}`);
-    const reader = createArkivReader(env.ARKIV_ACCESS_KEY);
-    const writer = createArkivWriter({ account: writerAccount, accessKey: env.ARKIV_ACCESS_KEY });
-    const indexer = new Indexer(pub, env.NUMA_ROUTER_ADDRESS, arkivConversionSink(reader, writer, writerAccount.address), pool ? new PgCursorStore(pool, "router", env.INDEXER_START_BLOCK - 1n) : new MemoryCursor(env.INDEXER_START_BLOCK - 1n));
-    let timer: ReturnType<typeof setInterval> | undefined;
-    app.addHook("onReady", async () => {
+  // Chain indexer: always on. It queues releases for the keeper and, when an Arkiv writer wallet is
+  // configured, also mirrors conversions to Arkiv (otherwise it mirrors nothing).
+  const releaseQueue = pool ? new PgReleaseQueue(pool) : new MemoryReleaseQueue();
+  const writerAccount = env.ARKIV_WRITER_PRIVATE_KEY ? privateKeyToAccount(env.ARKIV_WRITER_PRIVATE_KEY as `0x${string}`) : undefined;
+  const reader = writerAccount ? createArkivReader(env.ARKIV_ACCESS_KEY) : undefined;
+  const sink = writerAccount && reader
+    ? arkivConversionSink(reader, createArkivWriter({ account: writerAccount, accessKey: env.ARKIV_ACCESS_KEY }), writerAccount.address)
+    : noopSink;
+  const indexer = new Indexer(
+    pub, env.NUMA_ROUTER_ADDRESS, sink,
+    pool ? new PgCursorStore(pool, "router", env.INDEXER_START_BLOCK - 1n) : new MemoryCursor(env.INDEXER_START_BLOCK - 1n),
+    2_000n, 1n,
+    { settled: (e) => releaseQueue.add(e.orderId, e.paidAt), released: (e) => releaseQueue.markDone(e.orderId) },
+  );
+  const keeper = new ReleaseKeeper(
+    { router: env.NUMA_ROUTER_ADDRESS, maxGasPriceWei: parseGwei(String(env.RELAYER_MAX_GAS_PRICE_GWEI)), dailyCapWei: parseEther(String(env.RELAYER_DAILY_CAP_WBT)) },
+    pub, wallet, relayerAccount, releaseQueue, relayStore,
+  );
+  {
+    const timers: ReturnType<typeof setInterval>[] = [];
+    const loop = (name: string, ms: number, fn: () => Promise<unknown>) => {
       let busy = false;
-      timer = setInterval(async () => {
+      timers.push(setInterval(async () => {
         if (busy) return; busy = true;
-        try { await indexer.tick((o) => app.log.info(o)); } catch (e) { app.log.error(e, "indexer tick failed"); } finally { busy = false; }
-      }, env.INDEXER_POLL_MS);
+        try { await fn(); } catch (e) { app.log.error(e, `${name} tick failed`); } finally { busy = false; }
+      }, ms));
+    };
+    app.addHook("onReady", async () => {
+      loop("indexer", env.INDEXER_POLL_MS, () => indexer.tick((o) => app.log.info(o)));
+      loop("keeper", env.KEEPER_POLL_MS, () => keeper.tick((o) => app.log.info(o)));
     });
-    app.addHook("onClose", async () => { if (timer) clearInterval(timer); });
+    app.addHook("onClose", async () => { timers.forEach(clearInterval); });
+  }
 
+  // Arkiv-backed read features (reputation, discovery) need the Numa writer wallet's address.
+  if (writerAccount && reader) {
     linkOwnedBy = async (p) => !!(await resolveLink(reader, { code: p.code, campaignId: p.campaignId, expectedCreator: p.creator }));
     const settleCache = new Map();
     settledFor = async ({ creator, campaignId }) => {

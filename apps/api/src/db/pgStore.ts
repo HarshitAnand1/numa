@@ -3,6 +3,7 @@ import type pg from "pg";
 import type { ClaimRecord, ClaimStatus, RelayStore } from "../services/store.js";
 import type { CursorStore } from "../services/indexer.js";
 import type { ClickStats, ClickStore } from "../services/clicks.js";
+import type { ReleaseItem, ReleaseQueue } from "../services/releaseQueue.js";
 
 /** Postgres-backed relayer state: survives restarts, safe across multiple API instances. */
 export class PgRelayStore implements RelayStore {
@@ -76,4 +77,19 @@ export class PgClickStore implements ClickStore {
     const r = await this.pool.query("SELECT count(*)::int AS clicks, count(DISTINCT visitor)::int AS unique_visitors FROM link_clicks WHERE code = $1", [code]);
     return { clicks: r.rows[0].clicks, uniqueVisitors: r.rows[0].unique_visitors };
   }
+}
+
+export class PgReleaseQueue implements ReleaseQueue {
+  constructor(private readonly pool: pg.Pool) {}
+  async add(orderId: Hex, paidAt: number) {
+    await this.pool.query("INSERT INTO release_queue (order_id, paid_at) VALUES ($1, $2) ON CONFLICT (order_id) DO NOTHING", [orderId, paidAt]);
+  }
+  async listDue(beforeSec: number, limit = 50): Promise<ReleaseItem[]> {
+    const r = await this.pool.query("SELECT order_id, paid_at, tx_hash, attempts FROM release_queue WHERE done = false AND paid_at <= $1 ORDER BY paid_at LIMIT $2", [beforeSec, limit]);
+    return r.rows.map((x) => ({ orderId: x.order_id as Hex, paidAt: Number(x.paid_at), txHash: x.tx_hash as Hex | null, attempts: x.attempts }));
+  }
+  async markSent(orderId: Hex, txHash: Hex) { await this.pool.query("UPDATE release_queue SET tx_hash = $2 WHERE order_id = $1", [orderId, txHash]); }
+  async clearSent(orderId: Hex, error: string) { await this.pool.query("UPDATE release_queue SET tx_hash = NULL, attempts = attempts + 1, last_error = $2 WHERE order_id = $1", [orderId, error.slice(0, 300)]); }
+  async markFailed(orderId: Hex, error: string) { await this.pool.query("UPDATE release_queue SET attempts = attempts + 1, last_error = $2 WHERE order_id = $1", [orderId, error.slice(0, 300)]); }
+  async markDone(orderId: Hex) { await this.pool.query("UPDATE release_queue SET done = true, tx_hash = NULL WHERE order_id = $1", [orderId]); }
 }
