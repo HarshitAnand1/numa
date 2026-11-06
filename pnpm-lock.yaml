@@ -13,6 +13,9 @@ importers:
       '@fastify/rate-limit':
         specifier: ^10.0.0
         version: 10.3.0
+      '@numa/arkiv':
+        specifier: workspace:*
+        version: link:../../packages/arkiv
       '@numa/shared':
         specifier: workspace:*
         version: link:../../packages/shared
