@@ -1,7 +1,7 @@
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "../src/db/migrate.js";
-import { PgCursorStore, PgRelayStore } from "../src/db/pgStore.js";
+import { PgClickStore, PgCursorStore, PgRelayStore, PgReleaseQueue } from "../src/db/pgStore.js";
 
 // Integration test: runs only when TEST_DATABASE_URL points at a disposable Postgres.
 const url = process.env.TEST_DATABASE_URL;
@@ -32,6 +32,22 @@ d("Postgres stores", () => {
     await s.releaseOrder(id(run + 1));
     expect(await s.claimOrder(id(run + 1), "0xa")).toBe(false);
   });
+  it("tracks claim status: sent -> listSent -> settled; reverted orders can be claimed again", async () => {
+    const s = new PgRelayStore(pool);
+    const a = id(run + 10), b = id(run + 11);
+    await s.claimOrder(a, "0xAbC");
+    expect((await s.getClaim(a))?.status).toBe("claimed");
+    await s.markSent(a, id(1));
+    expect(await s.listSent(60_000)).not.toContainEqual(expect.objectContaining({ orderId: a })); // too young
+    expect(await s.listSent(-1000)).toContainEqual(expect.objectContaining({ orderId: a, status: "sent", txHash: id(1), buyer: "0xabc" }));
+    await s.markSettled(a);
+    expect((await s.getClaim(a))?.status).toBe("settled");
+    expect(await s.claimOrder(a, "0xabc")).toBe(false); // settled orders are never reclaimable
+    await s.claimOrder(b, "0xabc"); await s.markSent(b, id(2)); await s.markReverted(b);
+    expect(await s.claimOrder(b, "0xabc")).toBe(true); // reverted is
+    expect((await s.getClaim(b))?.txHash).toBeNull();
+    expect(await s.getClaim(id(run + 99))).toBeUndefined();
+  });
   it("accumulates spend and per-address counts (case-insensitive address)", async () => {
     const s = new PgRelayStore(pool);
     const day = `t-${run}`;
@@ -42,6 +58,28 @@ d("Postgres stores", () => {
     await s.incrementAddress(day, "0xabc");
     expect(await s.countForAddress(day, "0xAbC")).toBe(2);
     expect(await s.spentToday("none")).toBe(0n);
+  });
+  it("stores clicks and counts unique visitors", async () => {
+    const c = new PgClickStore(pool);
+    const code = `pg${run}`;
+    for (let i = 0; i < 6; i++) await c.record(code, `v${i % 3}`);
+    expect(await c.stats(code)).toEqual({ clicks: 6, uniqueVisitors: 3 });
+    expect(await c.stats(`none${run}`)).toEqual({ clicks: 0, uniqueVisitors: 0 });
+  });
+  it("release queue: idempotent add, due ordering, sent/cleared/done lifecycle", async () => {
+    const q = new PgReleaseQueue(pool);
+    const a = id(run + 40), b = id(run + 41);
+    await q.add(a, 1_000); await q.add(a, 9_999); await q.add(b, 2_000);
+    const due = (await q.listDue(1_500)).filter((x) => x.orderId === a || x.orderId === b);
+    expect(due).toEqual([{ orderId: a, paidAt: 1_000, txHash: null, attempts: 0 }]); // add is idempotent, b not yet due
+    await q.markSent(a, id(7));
+    expect((await q.listDue(1_500)).find((x) => x.orderId === a)?.txHash).toBe(id(7));
+    await q.clearSent(a, "reverted");
+    expect((await q.listDue(1_500)).find((x) => x.orderId === a)).toMatchObject({ txHash: null, attempts: 1 });
+    await q.markFailed(a, "sim failed");
+    expect((await q.listDue(1_500)).find((x) => x.orderId === a)?.attempts).toBe(2);
+    await q.markDone(a);
+    expect((await q.listDue(5_000)).some((x) => x.orderId === a)).toBe(false);
   });
   it("persists the indexer cursor", async () => {
     const c = new PgCursorStore(pool, `cur-${run}`, 41n);
