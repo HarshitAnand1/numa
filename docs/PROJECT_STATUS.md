@@ -19,3 +19,6 @@ Nothing is deployed. Gasless checkout is NOT yet demonstrated.
 
 ## Interface proposal awaiting Member 1
 `packages/shared/src/order.ts` and `abi.ts` define a PROPOSED `Order{campaignId,orderId,creator,amount,deadline}` (EIP-712 domain `NumaRouter`/`1`), auth nonce `keccak256(abi.encode(digest, creator))`, and `payOrder(order, merchantSig, buyer, validAfter, validBefore, v, r, s)`. The backend has never run against a real router; contracts must match or this changes.
+
+## Documentation
+Written: DESIGN, ARCHITECTURE (Mermaid), SMART_CONTRACTS (design only), ARKIV, WHITECHAIN, RELAYER, API, SECURITY, SDK (target design), DEVELOPMENT, DEMO (plan), DECISIONS 0001 (refund model, **Proposed**), 0002, 0003. Docs for unbuilt parts are labeled as plans.
