@@ -1,1 +1,1 @@
-{ "extends": "../../packages/config/tsconfig.base.json", "include": ["src", "tests"] }
+{ "extends": "../../packages/config/tsconfig.base.json", "include": ["src", "tests", "scripts"] }

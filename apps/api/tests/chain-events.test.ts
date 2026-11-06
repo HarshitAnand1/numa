@@ -101,4 +101,18 @@ describe("Indexer", () => {
     const ix = new Indexer(pub([]), router, sink, new MemoryCursor(100n), 2000n, 0n);
     expect(await ix.tick()).toBe(0);
   });
+  it("drives hooks for every settlement (even when Arkiv has no sink) and for releases; replays are safe", async () => {
+    const settledHook = vi.fn().mockResolvedValue(undefined);
+    const releasedHook = vi.fn().mockResolvedValue(undefined);
+    const releaseItem = getAbiItem({ abi: numaRouterAbi, name: "CommissionReleased" });
+    const releaseLog = { address: router, topics: encodeEventTopics({ abi: [releaseItem], eventName: "CommissionReleased", args: { orderId, creator } }), data: encodeAbiParameters([{ type: "uint256" }], [10_000_000n]), blockNumber: 12n, transactionHash: txHash, logIndex: 0, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false };
+    const { noopSink } = await import("../src/services/indexer.js");
+    const ix = new Indexer(pub([settledLog(), releaseLog]), router, noopSink, new MemoryCursor(0n), 2000n, 0n, { settled: settledHook, released: releasedHook });
+    await ix.tick();
+    expect(settledHook).toHaveBeenCalledWith({ orderId, paidAt: 1_700_000_000 });
+    expect(releasedHook).toHaveBeenCalledWith({ orderId });
+    // same range again: hooks fire again, so they must be (and are) idempotent
+    await new Indexer(pub([settledLog()]), router, noopSink, new MemoryCursor(0n), 2000n, 0n, { settled: settledHook }).tick();
+    expect(settledHook).toHaveBeenCalledTimes(2);
+  });
 });
