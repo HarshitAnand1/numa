@@ -1,5 +1,5 @@
 import type { Address, Hex, PublicClient } from "viem";
-import { findSettled } from "./verify.js";
+import { findSettled, type SettledCache } from "./verify.js";
 
 export interface EndorsementClaim {
   merchant: Address; // Arkiv entity owner (the claimed author)
@@ -14,8 +14,8 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
  * order's merchant and the creator/campaign match. This stops anyone endorsing (or smearing) a creator
  * they never sold through. Collusion between a merchant and a creator is NOT prevented.
  */
-export async function verifyEndorsement(pub: PublicClient, router: Address, c: EndorsementClaim): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const f = await findSettled(pub, router, c.txHash, c.orderId);
+export async function verifyEndorsement(pub: PublicClient, router: Address, c: EndorsementClaim, cache?: SettledCache): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const f = await findSettled(pub, router, c.txHash, c.orderId, cache);
   if (!f.ok) return f;
   if (!same(f.value.merchant, c.merchant)) return { ok: false, reason: "author is not the order's merchant" };
   if (!same(f.value.creator, c.creator)) return { ok: false, reason: "creator mismatch" };
@@ -24,13 +24,13 @@ export async function verifyEndorsement(pub: PublicClient, router: Address, c: E
 }
 
 /** One endorsement per order (first by entityKey wins, deterministic); returns the verified ones plus rejections. */
-export async function verifiedEndorsements(pub: PublicClient, router: Address, claims: EndorsementClaim[]) {
+export async function verifiedEndorsements(pub: PublicClient, router: Address, claims: EndorsementClaim[], cache?: SettledCache) {
   const seen = new Set<string>();
   const accepted: EndorsementClaim[] = [];
   const rejected: { entityKey: Hex; reason: string }[] = [];
   for (const c of [...claims].sort((a, b) => a.entityKey.localeCompare(b.entityKey))) {
     if (seen.has(c.orderId.toLowerCase())) { rejected.push({ entityKey: c.entityKey, reason: "duplicate endorsement for order" }); continue; }
-    const v = await verifyEndorsement(pub, router, c);
+    const v = await verifyEndorsement(pub, router, c, cache);
     if (v.ok) { seen.add(c.orderId.toLowerCase()); accepted.push(c); } else rejected.push({ entityKey: c.entityKey, reason: v.reason });
   }
   return { accepted, rejected };

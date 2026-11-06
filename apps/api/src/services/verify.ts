@@ -16,7 +16,20 @@ export interface SettledEvent {
 }
 
 /** Fetch the router's OrderSettled event for `orderId` from the given tx, or explain why not. */
-export async function findSettled(pub: PublicClient, router: Address, txHash: Hex, orderId: Hex): Promise<{ ok: true; value: SettledEvent } | { ok: false; reason: string }> {
+/** Opt-in cache of successful lookups (a settled event is final); pass the same Map across requests. */
+export type SettledCache = Map<string, SettledEvent>;
+const CACHE_MAX = 5000;
+
+export async function findSettled(pub: PublicClient, router: Address, txHash: Hex, orderId: Hex, cache?: SettledCache): Promise<{ ok: true; value: SettledEvent } | { ok: false; reason: string }> {
+  const ck = `${router}:${txHash}:${orderId}`.toLowerCase();
+  const hit = cache?.get(ck);
+  if (hit) return { ok: true, value: hit };
+  const r = await lookup(pub, router, txHash, orderId);
+  if (r.ok && cache) { if (cache.size >= CACHE_MAX) cache.clear(); cache.set(ck, r.value); }
+  return r;
+}
+
+async function lookup(pub: PublicClient, router: Address, txHash: Hex, orderId: Hex): Promise<{ ok: true; value: SettledEvent } | { ok: false; reason: string }> {
   let receipt;
   try { receipt = await pub.getTransactionReceipt({ hash: txHash }); }
   catch { return { ok: false, reason: "tx not found" }; }
@@ -29,8 +42,8 @@ export async function findSettled(pub: PublicClient, router: Address, txHash: He
 }
 
 /** Check a claimed conversion against the router's OrderSettled event in the claimed tx. */
-export async function verifyConversion(pub: PublicClient, router: Address, claim: ConversionClaim): Promise<VerifyResult> {
-  const f = await findSettled(pub, router, claim.txHash, claim.orderId);
+export async function verifyConversion(pub: PublicClient, router: Address, claim: ConversionClaim, cache?: SettledCache): Promise<VerifyResult> {
+  const f = await findSettled(pub, router, claim.txHash, claim.orderId, cache);
   if (!f.ok) return f;
   const a = f.value;
   if (!eq(a.creator, claim.creator)) return { ok: false, reason: "creator mismatch" };
