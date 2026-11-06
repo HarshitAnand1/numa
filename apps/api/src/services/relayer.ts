@@ -53,11 +53,11 @@ export class Relayer {
       await recoverTypedDataAddress({ ...orderTypedData(order, this.cfg.chainId, this.cfg.router), signature: req.merchantSig });
     } catch { throw new RelayError("BAD_MERCHANT_SIG", "unrecoverable merchant signature"); }
 
-    if (!this.store.claimOrder(order.orderId)) throw new RelayError("DUPLICATE", "order already submitted");
+    if (!(await this.store.claimOrder(order.orderId, buyer))) throw new RelayError("DUPLICATE", "order already submitted");
     let keepClaim = false;
     try {
       const day = this.day();
-      if (this.store.countForAddress(day, buyer) >= this.cfg.perAddressDailyLimit)
+      if ((await this.store.countForAddress(day, buyer)) >= this.cfg.perAddressDailyLimit)
         throw new RelayError("ADDRESS_LIMIT_EXCEEDED", "per-address daily limit reached");
 
       const gasPrice = await this.pub.getGasPrice();
@@ -77,12 +77,13 @@ export class Relayer {
         address: this.cfg.router, abi: numaRouterAbi, functionName: "payOrder", args, account: this.account,
       });
       const maxCost = gas * gasPrice;
-      if (this.store.spentToday(day) + maxCost > this.cfg.dailyCapWei) throw new RelayError("DAILY_CAP_EXCEEDED", "relayer daily gas cap reached");
+      if ((await this.store.spentToday(day)) + maxCost > this.cfg.dailyCapWei) throw new RelayError("DAILY_CAP_EXCEEDED", "relayer daily gas cap reached");
       const balance = await this.pub.getBalance({ address: this.account.address });
       if (balance < maxCost) throw new RelayError("INSUFFICIENT_RELAYER_BALANCE", "relayer WBT balance too low");
 
       const txHash = await this.wallet.writeContract({ ...request, gas, gasPrice } as never);
       keepClaim = true; // a tx is in flight; never auto-retry the same order
+      await this.store.markSent(order.orderId, txHash);
       log({ evt: "relay.sent", orderId: order.orderId, txHash });
 
       let receipt;
@@ -92,12 +93,12 @@ export class Relayer {
       if (receipt.status !== "success") throw new RelayError("TX_REVERTED", `tx ${txHash} reverted`);
 
       const cost = receipt.gasUsed * receipt.effectiveGasPrice;
-      this.store.addSpend(day, cost);
-      this.store.incrementAddress(day, buyer);
+      await this.store.addSpend(day, cost);
+      await this.store.incrementAddress(day, buyer);
       log({ evt: "relay.settled", orderId: order.orderId, txHash, block: receipt.blockNumber.toString() });
       return { txHash, blockNumber: receipt.blockNumber, gasCostWei: cost };
     } finally {
-      if (!keepClaim) this.store.releaseOrder(order.orderId);
+      if (!keepClaim) await this.store.releaseOrder(order.orderId);
     }
   }
 }
