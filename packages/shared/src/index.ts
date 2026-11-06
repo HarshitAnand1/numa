@@ -21,11 +21,15 @@ export * from "./schemas.js";
 export * from "./abis";
 export { WHITECHAIN_SEPOLIA_CHAIN_ID, DEPLOYED_ADDRESSES } from "./addresses";
 export type { DeployedAddresses } from "./addresses";
-export type { Order as NumaRouterOrder } from "./contracts-types";
+export type { Order as NumaRouterOrder, OrderCommitment } from "./contracts-types";
 export {
   NUMA_ROUTER_EIP712_DOMAIN_NAME,
   NUMA_ROUTER_EIP712_DOMAIN_VERSION,
   ORDER_EIP712_TYPES,
+  ORDER_COMMITMENT_EIP712_TYPES,
+  ORDER_COMMITMENT_TEST_VECTOR_DOMAIN,
+  ORDER_COMMITMENT_TEST_VECTOR,
+  ORDER_COMMITMENT_TEST_VECTOR_EXPECTED_DIGEST,
   NUMA_ROUTER_EVENTS,
   CAMPAIGN_REGISTRY_EVENTS,
 } from "./contracts-types";
