@@ -11,9 +11,22 @@
 
 `POST /relay` body: `{ order, merchantSig, buyer, auth:{validAfter,validBefore,v,r,s} }`
 → `{ status:"settled", txHash, blockNumber }` or `{ error: CODE, message }`.
-Codes: ORDER_EXPIRED, BAD_AUTH_WINDOW, BAD_SELF_PURCHASE, BAD_MERCHANT_SIG, DUPLICATE (409), GAS_PRICE_TOO_HIGH, DAILY_CAP_EXCEEDED, ADDRESS_LIMIT_EXCEEDED, INSUFFICIENT_RELAYER_BALANCE, SIMULATION_FAILED, TX_REVERTED, TX_TIMEOUT (422).
+Codes: ORDER_EXPIRED, BAD_AUTH_WINDOW, BAD_SELF_PURCHASE, BAD_MERCHANT_SIG, BAD_BUYER_AUTH, DUPLICATE (409), GAS_PRICE_TOO_HIGH, DAILY_CAP_EXCEEDED, ADDRESS_LIMIT_EXCEEDED, INSUFFICIENT_RELAYER_BALANCE, SIMULATION_FAILED, TX_REVERTED, TX_TIMEOUT (422).
 
-## Arkiv-backed (enabled only when `ARKIV_WRITER_PRIVATE_KEY` is set)
+## Discovery layer (enabled only when `ARKIV_WRITER_PRIVATE_KEY` is set)
+All amounts are decimal strings. Optional `CAMPAIGN_REGISTRY_ADDRESS` enables on-chain ownership verification (flags are `null` without it).
+| GET | Path | Returns |
+|---|---|---|
+| | `/discovery/campaigns?category&region&minCommissionBps&sort=commission\|endingSoon&limit` | active campaigns + `merchantVerified` |
+| | `/discovery/trending?limit` | campaigns ranked by live offers (72h) then commission, with `offerCount` |
+| | `/discovery/creators?niche&channel&maxAskBps&openOnly&limit` | live profiles + `{score, verifiedConversions, label}` (merchant-side search) |
+| | `/discovery/leaderboard?campaignId&days&limit` | creators ranked by verified reputation (chain-verified conversions only) |
+| | `/creators/:address` | **creator card**: profile, reputation, verified endorsements `{count, averageRating, items}`, recent verified sales, rejected claims |
+| | `/creators/:address/recommendations` | active campaigns matching the creator's niches and minimum ask (404 without a profile) |
+| | `/creators/:address/invites` | invites with `verified` (inviter == campaign's on-chain merchant) |
+| | `/creators/:address/reputation` | reputation only |
+
+## Arkiv-backed details
 | GET | `/creators/:address/reputation` | Reads the creator's conversions from Arkiv (owned by the Numa writer), keeps only those verified against the router's `OrderSettled` event, returns `{ verifiedConversions, distinctPayers, grossSettled, commissionEarned, score|null, label, rejected[] }` (amounts as decimal strings). |
 
 The same flag starts the **indexer** loop (`INDEXER_POLL_MS`): reads router events from `INDEXER_START_BLOCK`, publishes `numa.conversion` entities (idempotent by `orderId`) and updates status on release/refund. The cursor is stored in Postgres (`indexer_cursor`) when `DATABASE_URL` is set, otherwise in memory (re-scans from `INDEXER_START_BLOCK` after restart: safe, slower).
