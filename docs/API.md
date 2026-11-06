@@ -48,8 +48,12 @@ Enabled only when `AGENT_WALLET_PRIVATE_KEY`, an Arkiv reader and `CAMPAIGN_REGI
 | `GET /agents/status` | `{enabled, agentAddress}`: the wallet a principal must bind with a `numa.agent` entity |
 | `POST /agents/policy` | Create or update private guardrails. Body `{policy, issuedAt, signature}`; the signature is EIP-191 over `policyAuthMessage("write", …)` by the principal and must be fresh (5 min) |
 | `POST /agents/policy/read` | Read your own policy. Body `{principal, role, issuedAt, signature}` signed the same way with action `read` |
-| `GET /agents/threads/:offerKey` | Public, verified negotiation thread for one offer |
+| `GET /agents/binding?principal=0x…&role=creator\|merchant` | Is the agent connected? `{enabled, agentAddress, bound, bindings[]}`; `bound` is true only when a live `numa.agent` entity owned by the principal names the API's agent wallet. Reads Arkiv, so the UI never has to |
+| `GET /agents/threads?principal=0x…&role=creator\|merchant&limit` | "My threads" feed: every live offer the principal is party to (creator: offers they own; merchant: offers on campaigns whose on-chain merchant is the principal), most advanced first. Each item: `{offerKey, campaignId, campaignName, creator, merchant, offerAskBps, state: open\|deal\|rejected, agreedBps?, round, messageCount, ignoredMessages, last?{from,action,bps,note,seq}}`. `ignoredMessages` counts messages that failed verification. Public data, so no signature |
+| `GET /agents/threads/:offerKey` | Public, verified negotiation thread for one offer (all messages) |
 | `GET /agents/deals?merchant=0x…` | Deals reached for that merchant, with the on-chain steps the merchant must sign (`approveCreator`, or `createCampaign` then `approveCreator`) |
+
+**Signed text.** Build it with `policyAuthMessage(action, principal, role, issuedAt, body)` from `@numa/shared`; do not hand-write it. The body is serialized as canonical JSON (sorted keys), so key order cannot break a signature. Sign it with `personal_sign` and send the same `body` object you signed.
 
 Policy fields: `role`, `enabled`, `limitBps` (creator floor / merchant ceiling), `openingBps`, `autoAcceptBps`, `stepBps` (10-1000), `maxRounds` (1-10), `categories`. Contradictory limits are rejected with `400 BAD_POLICY`.
 
