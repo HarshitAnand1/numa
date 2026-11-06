@@ -83,3 +83,25 @@ export const EndorsementSchema = defineSchema("numa.endorsement", {
   rating: u64().indexed(), // 1..5
   note: str(),
 });
+
+/** Owner: principal (creator or merchant). Delegates writing negotiation messages to `agent`. Delete the entity to revoke. */
+export const AgentBindingSchema = defineSchema("numa.agent", {
+  agent: addr().indexed(),
+  role: str().indexed(), // "creator" | "merchant"
+});
+
+/**
+ * Owner: the agent wallet (or the principal itself). One message per round of a negotiation thread.
+ * Trusted only if the owner is the principal for `from`, or an agent bound to that principal by a live `numa.agent`.
+ */
+export const NegotiationSchema = defineSchema("numa.negotiation", {
+  offerKey: key().indexed(), // thread id = the creator's numa.offer entity key
+  campaignId: u64().indexed(),
+  creator: addr().indexed(),
+  merchant: addr().indexed(),
+  from: str().indexed(), // "creator" | "merchant"
+  seq: u64().indexed(), // 1-based round number within the thread
+  action: str().indexed(), // "propose" | "counter" | "accept" | "reject"
+  bps: u64(), // commission being proposed / accepted
+  note: str(), // free text, untrusted
+});
