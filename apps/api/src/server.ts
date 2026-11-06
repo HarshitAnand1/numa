@@ -4,7 +4,7 @@ import { createPublicClient, createWalletClient, http, parseEther, parseGwei } f
 import { privateKeyToAccount } from "viem/accounts";
 import { createOrderRequest, relayRequest, whitechainSepolia } from "@numa/shared";
 import { loadEnv, type Env } from "./config/env.js";
-import { OrderService } from "./services/orders.js";
+import { OrderSigner } from "@numa/sdk-server";
 import { Relayer, RelayError } from "./services/relayer.js";
 import { MemoryRelayStore } from "./services/store.js";
 import { isAddress } from "viem";
@@ -38,7 +38,7 @@ export function buildServer(env: Env) {
     pub, wallet, relayerAccount, pool ? new PgRelayStore(pool) : new MemoryRelayStore(),
   );
   const orders = env.MERCHANT_SIGNER_KEY
-    ? new OrderService(privateKeyToAccount(env.MERCHANT_SIGNER_KEY as `0x${string}`), env.WHITECHAIN_CHAIN_ID, env.NUMA_ROUTER_ADDRESS, env.ORDER_TTL_SECONDS)
+    ? new OrderSigner(privateKeyToAccount(env.MERCHANT_SIGNER_KEY as `0x${string}`), env.WHITECHAIN_CHAIN_ID, env.NUMA_ROUTER_ADDRESS, env.ORDER_TTL_SECONDS)
     : undefined;
 
   app.register(rateLimit, { max: env.RATE_LIMIT_PER_MINUTE, timeWindow: "1 minute" });

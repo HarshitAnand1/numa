@@ -16,6 +16,9 @@ importers:
       '@numa/arkiv':
         specifier: workspace:*
         version: link:../../packages/arkiv
+      '@numa/sdk-server':
+        specifier: workspace:*
+        version: link:../../packages/sdk-server
       '@numa/shared':
         specifier: workspace:*
         version: link:../../packages/shared
