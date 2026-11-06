@@ -12,13 +12,13 @@ import { privateKeyToAccount } from "viem/accounts";
 import { getBalance, getGasPrice } from "viem/actions";
 import {
   arkivChain, createArkivReader, createArkivWriter, getProfile, listCampaigns, listDecisions, listEndorsements, listInvitesFor, listOffers,
-  listConversions, publishCampaign, publishConversion, publishDecision, publishEndorsement, publishInvite, publishLink, publishOffer, publishProfile,
+  listConversions, listLiveOffers, topConversions, publishCampaign, publishConversion, publishDecision, publishEndorsement, publishInvite, publishLink, publishOffer, publishProfile,
   renewProfile, resolveLink, searchCreators, setProfileAvailability, type ArkivWriter,
 } from "../src/index.js";
 
 const EXPLORER = "https://rabdi.explorer.arkiv.network";
 const checkOnly = process.argv.includes("--check");
-const maxTx = Number(process.env.ARKIV_LIVE_MAX_TX ?? 40);
+const maxTx = Number(process.env.ARKIV_LIVE_MAX_TX ?? 80);
 
 function key(name: string): Hex {
   const v = process.env[name];
@@ -67,7 +67,7 @@ async function main() {
   console.log(`creator  ${creatorAcct.address}  ${formatEther(bc)} tGLM`);
 
   // merchant: campaign, decision, invite, endorsement + 4 deletes; creator: profile, offer, link + patch, extend + 3 deletes; writer: conversion + delete
-  const needMerchant = perWrite * 9n, needCreator = perWrite * 9n, needWriter = perWrite * 3n + (needMerchant + needCreator) + parseEther("0.001");
+  const needMerchant = perWrite * 14n, needCreator = perWrite * 14n, needWriter = perWrite * 8n + (needMerchant + needCreator) + parseEther("0.001");
   console.log(`planned spend ≈ merchant ${formatEther(needMerchant)}, creator ${formatEther(needCreator)}, writer ${formatEther(needWriter)} tGLM (upper bounds)`);
   if (checkOnly) { console.log(bw >= needWriter ? "Funding looks sufficient." : `Writer needs ≥ ${formatEther(needWriter)} tGLM: fund ${writerAcct.address} at https://hub.arkiv.network/faucet`); return; }
   if (bw < needWriter) throw new Error(`writer underfunded: has ${formatEther(bw)}, needs ≥ ${formatEther(needWriter)} tGLM (https://hub.arkiv.network/faucet)`);
@@ -139,6 +139,32 @@ async function main() {
       await eventually(() => listConversions(reader, { creator: creatorAcct.address, writer: writerAcct.address }), (r) => r.some((x) => x.orderId === orderId));
       const spoof = await listConversions(reader, { creator: creatorAcct.address, writer: creatorAcct.address });
       if (spoof.some((x) => x.orderId === orderId)) throw new Error("conversion returned under a non-writer owner");
+    });
+    await check("sorted queries: highest commission first, ending soonest first, largest conversions first", async () => {
+      const cat = `sort-${niche}`;
+      const specs = [{ id: campaignId + 1n, bps: 2000, days: 8 }, { id: campaignId + 2n, bps: 3000, days: 12 }, { id: campaignId + 3n, bps: 1000, days: 5 }];
+      for (const c of specs) { budget(); note(`sort campaign ${c.id}`, await publishCampaign(merchant, { campaignId: c.id, status: "active", category: cat, commissionBps: c.bps, endsAt: Math.floor(Date.now() / 1000) + c.days * 86400, region: "in", name: "sort", description: "sort" }), "merchant"); }
+      await eventually(() => listCampaigns(reader, { category: cat }), (r) => r.length === 3);
+      const byCommission = (await listCampaigns(reader, { category: cat, sort: "commission" })).map((c) => c.commissionBps);
+      if (JSON.stringify(byCommission) !== JSON.stringify([3000, 2000, 1000])) throw new Error(`commission order wrong: ${byCommission}`);
+      const byEnd = (await listCampaigns(reader, { category: cat, sort: "endingSoon" })).map((c) => Number(c.campaignId - campaignId));
+      if (JSON.stringify(byEnd) !== JSON.stringify([3, 1, 2])) throw new Error(`end-date order wrong: ${byEnd}`);
+      for (const g of [10_000_000n, 90_000_000n, 40_000_000n]) { budget(); note("sort conversion (synthetic)", await publishConversion(writer, { creator: creatorAcct.address, merchant: merchantAcct.address, campaignId: specs[0]!.id, gross: g, commission: g / 10n, status: "held", paidAt: Math.floor(Date.now() / 1000), txHash: fakeTx, orderId: `0x${"d1".repeat(30)}${g.toString(16).padStart(4, "0").slice(-4)}` as Hex }), "writer"); }
+      await eventually(() => topConversions(reader, { writer: writerAcct.address, campaignId: specs[0]!.id }), (r) => r.length === 3);
+      const gross = (await topConversions(reader, { writer: writerAcct.address, campaignId: specs[0]!.id })).map((c) => c.gross.toString());
+      if (gross.join(",") !== "90000000,40000000,10000000") throw new Error(`gross order wrong: ${gross.join(",")}`);
+    });
+    await check("offset pagination: pages of 2 over 5 offers return each exactly once; live offers pages by key", async () => {
+      const pc = campaignId + 9n;
+      const keys: Hex[] = [];
+      for (let i = 0; i < 5; i++) { budget(); keys.push(note(`page offer ${i}`, await publishOffer(creator, { campaignId: pc, channel: "youtube", audience: `a${i}`, askBps: 500 + i, expectedReach: 1n }), "creator").entityKey); }
+      await eventually(() => listOffers(reader, pc, 50), (r) => r.length === 5);
+      const seen: Hex[] = [];
+      for (let off = 0; off < 6; off += 2) seen.push(...(await listOffers(reader, pc, 2, off)).map((o) => o.entityKey));
+      if (seen.length !== 5 || new Set(seen).size !== 5 || !keys.every((k) => seen.includes(k))) throw new Error(`paging wrong: got ${seen.length} rows, ${new Set(seen).size} unique`);
+      const all = await listLiveOffers(reader, 3, 2);
+      if (all.length < 5 && all.length !== 6) throw new Error(`listLiveOffers returned ${all.length}`);
+      return "page size 2 (the >100-row page size itself is not exercised)";
     });
   } finally {
     // Always try to clean up what we created (each owner deletes their own entities).
