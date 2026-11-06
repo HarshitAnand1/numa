@@ -45,7 +45,14 @@ Profiles are self-asserted (a creator's own words); their *verified* numbers com
 ## API (`src/entities.ts`)
 `publishCampaign/Offer/Decision/Link/Conversion(writer, …)`, `listCampaigns(reader, filter)`, `listOffers`, `listDecisions(reader, campaignId, merchant)`, `resolveLink({code, campaignId, expectedCreator})`, `listConversions({creator, writer})`. Clients: `createArkivReader`, `createArkivWriter({account, transport?})` (browser wallets pass their own).
 
+## Writing safely on Rabdi (`src/safeWriter.ts`)
+Per Arkiv's write-safety guidance, default gas estimation can run out of gas on Rabdi, so every write must carry an explicit nonce, gas and gasPrice. `createArkivWriter` therefore returns a `SafeWriter` that: serializes writes per account, verifies chain id 7794095, requires latest==pending nonce, injects `{nonce, gas=1,000,000, gasPrice}`, rejects a tx whose `gas*gasPrice` exceeds `maxCostWei` (default 0.05 tGLM) or the balance, and never auto-retries. Caller-supplied tx params are ignored. Large payloads would need ≥2× a measured estimate (not implemented; our entities are small). Browser wallets build the same wrapper with `createSafeWriter(wallet, reader, address)`.
+The Arkiv MCP (mcp.arkiv.network) is knowledge/verification only and never signs; all writes go through the SDK.
+
+## Live check
+`pnpm --filter @numa/arkiv live:check -- --check` (read-only: chain, balances, cost estimate) then `pnpm --filter @numa/arkiv live:check`. Needs `ARKIV_WRITER_PRIVATE_KEY`, `ARKIV_TEST_MERCHANT_KEY`, `ARKIV_TEST_CREATOR_KEY`, `ARKIV_ACCESS_KEY` in `.env`; fund only the writer (it funds the others, ≈0.022 tGLM at 1 gwei). It publishes each entity type as its real owner, asserts reads and owner filtering (a decision, link or conversion is *not* returned under a non-owner wallet), measures indexing latency, then deletes everything it created. Its conversion/endorsement rows are synthetic (obviously fake order ids) and exist only for the duration of the test.
+
 ## Verified vs not
 - Verified: package typechecks against SDK 1.0.1; read connection to Rabdi works (chain id, block number); 9 offline unit tests (ownership filters, expiry rules, validation).
 - **Also not verified:** profile/invite/endorsement writes, `orderBy` and `extendEntity`/`patchEntity` on live Arkiv; `merchantOf` assumes a function Member 1 hasn't written yet.
-- **Not verified:** any real `createEntity`/query round-trip (needs a tGLM-funded wallet); attribute value ranges for `u256`; behavior of `ownedBy` combined with schema filter on live data; indexing latency. Do this first once a wallet is funded.
+- **Not verified until `live:check` has been run with funded wallets:** any real `createEntity`/query round-trip; attribute value ranges for `u256`; behavior of `ownedBy` combined with schema filter on live data; indexing latency. Do this first once a wallet is funded.

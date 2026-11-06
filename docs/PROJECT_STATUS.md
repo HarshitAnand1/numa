@@ -47,3 +47,6 @@ Written: DESIGN, ARCHITECTURE (Mermaid), SMART_CONTRACTS (now reflects the actua
 
 ## Creator discovery layer (Member 2)
 Built and tested offline (43 API + 20 Arkiv tests): `numa.profile`, `numa.invite`, `numa.endorsement`; creator search, trending, recommendations, leaderboard, creator card, invite verification; endorsement and conversion verification against `OrderSettled`. **Not verified live:** no Arkiv write/read round trip yet; `CampaignRegistry.merchantOf` doesn't exist on the shipped contract (see "Interface reconciliation" above — use `getCampaign(campaignId).merchant` instead). Frontend for these: not started (Member 3).
+
+## Arkiv live readiness (Member 2)
+Rabdi-safe writer built (5 tests). Three dev wallets generated locally into `.env` (writer / test merchant / test creator; addresses only in `live:check` output). `live:check --check` confirmed Rabdi chain 7794095 and 1 gwei gas; **wallets hold 0 tGLM, so no live write has happened.** Blocker: fund the writer address (~0.022 tGLM) at hub.arkiv.network/faucet and set `ARKIV_ACCESS_KEY` (hub.arkiv.network/access-keys).
