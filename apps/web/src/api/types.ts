@@ -91,3 +91,24 @@ export interface ApiCreatorCard {
   recentSales: ApiRecentSale[];
   rejected: { conversions: ApiRejected[]; endorsements: ApiRejected[] };
 }
+
+/** `GET /creators/:address/recommendations`: active campaigns matching the creator's niches and minimum ask. */
+export interface ApiRecommendation {
+  campaign: ApiCampaign;
+  /** category equals the creator's primary niche (vs. one of their extra niches) */
+  primaryMatch: boolean;
+}
+
+/**
+ * `GET /creators/:address/invites`. `verified` is whether the inviting wallet is the campaign's
+ * on-chain merchant (null = could not be checked). The API does not expose the 48h expiry.
+ */
+export interface ApiInvite {
+  entityKey: string;
+  merchant: string;
+  campaignId: string;
+  creator: string;
+  offeredBps: number;
+  message: string;
+  verified: boolean | null;
+}
