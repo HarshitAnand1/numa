@@ -33,3 +33,4 @@ export {
   NUMA_ROUTER_EVENTS,
   CAMPAIGN_REGISTRY_EVENTS,
 } from "./contracts-types";
+export * from "./agentAuth.js";
