@@ -144,3 +144,18 @@ flowchart LR
   API --> S3[trending / leaderboard]
   API --> S4[creator card]
 ```
+
+## Negotiation agents (see AGENTS.md, ADR 0006)
+```mermaid
+flowchart LR
+  Cr[Creator] -->|publish| O[numa.offer]
+  Cr & Me[Merchant] -->|bind, revocable| B[numa.agent]
+  PG[(Postgres: private guardrails)] --> R
+  O & B --> R[Agent runner]
+  R -->|rules engine decides| N[numa.negotiation]
+  R -.->|optional: note text only| L[Claude]
+  CH[(Whitechain: getCampaign.merchant)] --> R
+  N --> D[Deal ticket]
+  D -->|merchant signs| Reg[CampaignRegistry.approveCreator / createCampaign]
+  Reg --> Sale[Real USDT sale via NumaRouter]
+```
