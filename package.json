@@ -1,0 +1,14 @@
+{
+  "name": "numa",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.34.9",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "contracts:build": "cd packages/contracts && forge build",
+    "contracts:test": "cd packages/contracts && forge test -vv"
+  }
+}
