@@ -1,0 +1,230 @@
+/* Kiln & Co.: deliberately nothing like numa. Warm, quiet, serif. */
+:root {
+  --clay: #b5543a;
+  --cream: #f4ecdf;
+  --ink: #2b211b;
+  --moss: #4a5a43;
+  --line: rgba(43, 33, 27, 0.18);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+.shop {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+.shop-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 20px 40px;
+  padding: 26px 6vw;
+  border-bottom: 1px solid var(--line);
+}
+.shop-logo {
+  font-size: 26px;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+.shop-head nav {
+  display: flex;
+  gap: 26px;
+  font-size: 15px;
+}
+.shop-head small {
+  margin-left: auto;
+  font: 11px / 1 ui-monospace, Menlo, monospace;
+  color: var(--clay);
+}
+.product {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6vw;
+  align-items: center;
+  padding: 6vh 6vw;
+}
+.mug {
+  position: relative;
+  aspect-ratio: 1;
+  max-width: 520px;
+  width: 100%;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, #ebd9bf, #dcc6a6);
+  border-radius: 50%;
+}
+.mug-body {
+  position: relative;
+  width: 46%;
+  height: 52%;
+  background: linear-gradient(100deg, #c4694c, var(--clay) 55%, #9a4630);
+  border-radius: 8% 8% 30% 30% / 6% 6% 22% 22%;
+  box-shadow: inset -14px 0 24px rgba(0, 0, 0, 0.18);
+}
+.mug-body::before {
+  /* the ash speckle */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: radial-gradient(rgba(244, 236, 223, 0.55) 1px, transparent 1.4px), radial-gradient(rgba(43, 33, 27, 0.3) 1px, transparent 1.4px);
+  background-size: 11px 13px, 17px 15px;
+  background-position: 0 0, 6px 7px;
+}
+.mug-handle {
+  position: absolute;
+  right: -26%;
+  top: 18%;
+  width: 34%;
+  height: 46%;
+  border: 14px solid var(--clay);
+  border-left: 0;
+  border-radius: 0 60% 60% 0;
+}
+.mug-shadow {
+  position: absolute;
+  bottom: 17%;
+  width: 52%;
+  height: 4%;
+  background: rgba(43, 33, 27, 0.22);
+  border-radius: 50%;
+  filter: blur(6px);
+}
+.eyebrow {
+  margin: 0;
+  font: 12px / 1 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--moss);
+}
+h1 {
+  margin: 14px 0 18px;
+  font-size: clamp(40px, 5.4vw, 76px);
+  font-weight: 400;
+  line-height: 1;
+  font-style: italic;
+}
+.lede {
+  max-width: 46ch;
+  margin: 0 0 26px;
+  font-size: 18px;
+  line-height: 1.55;
+}
+dl {
+  display: grid;
+  gap: 0;
+  max-width: 420px;
+  margin: 0 0 24px;
+  border-top: 1px solid var(--line);
+}
+dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+dt {
+  color: var(--moss);
+}
+dd {
+  margin: 0;
+}
+.price {
+  margin: 0 0 22px;
+  font-size: 40px;
+}
+.price small {
+  font: 13px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.08em;
+}
+.notice {
+  max-width: 44ch;
+  padding: 14px 16px;
+  border: 1px dashed var(--clay);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.thanks {
+  max-width: 46ch;
+  margin-bottom: 14px;
+  padding: 18px 20px;
+  background: var(--moss);
+  color: var(--cream);
+}
+.thanks p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+code {
+  font: 13px ui-monospace, Menlo, monospace;
+}
+
+/* the numa widget, restyled to fit the shop (it only ships minimal inline styles) */
+.numa-checkout {
+  max-width: 420px;
+}
+.numa-button {
+  background: var(--ink) !important;
+  color: var(--cream) !important;
+  border: 0 !important;
+  border-radius: 0;
+  font-family: Georgia, serif !important;
+  font-size: 17px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.02em;
+  padding: 16px 22px !important;
+}
+.numa-button:hover:not(:disabled) {
+  background: var(--clay) !important;
+}
+.numa-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.numa-error {
+  border-color: var(--clay) !important;
+  background: rgba(181, 84, 58, 0.08);
+}
+.numa-status {
+  font-size: 13px;
+  color: var(--moss);
+}
+.numa-receipt strong {
+  font-size: 20px;
+}
+.shop-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 22px 6vw;
+  border-top: 1px solid var(--line);
+  font: 12px ui-monospace, Menlo, monospace;
+  color: var(--moss);
+}
+@media (max-width: 800px) {
+  .product {
+    grid-template-columns: 1fr;
+    padding: 36px 20px;
+  }
+  .shop-head,
+  .shop-foot {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .shop-head small {
+    margin-left: 0;
+  }
+}
+.numa-receipt a {
+  color: var(--clay);
+}
