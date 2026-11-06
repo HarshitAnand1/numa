@@ -1,5 +1,5 @@
 # Negotiation agents (design)
-Status: **design + backend in progress.** See `docs/DECISIONS/0006-negotiation-agents.md`. Anything not marked verified below is not verified.
+Status: **backend built and tested; not yet run against a deployed registry or with a real LLM key; no UI.** See `docs/DECISIONS/0006-negotiation-agents.md`. Anything not marked verified below is not verified.
 
 ## Goal
 A creator and a merchant can each switch on an agent that negotiates the commission rate over Arkiv while they are away, inside limits only the owner knows. The deal still ends in a normal on-chain approval and a real USDT sale.
@@ -35,5 +35,10 @@ The rate lives on the campaign, not on the creator (ADR 0006). The ticket offers
 ## Security
 Agent wallets hold only tGLM for Arkiv writes. Guardrails are private. Counterparty notes are untrusted text and never reach the decision engine. The LLM can be absent or refuse without changing outcomes.
 
+## Verified so far
+- Engine, policy validation, signed policy auth, thread verification and the runner: unit/integration tests against an in-memory Arkiv ledger (`apps/api/tests/agents.test.ts`). Includes spoofed-message and unconfirmed-merchant cases and a convergence check (overlapping ranges always end in a deal inside both limits; non-overlapping ranges end in a rejection).
+- `numa.agent` / `numa.negotiation` round trip on **live Rabdi**: `pnpm --filter @numa/arkiv live:agents` (4/4): binding visible only under its owner, ordered thread read-back, forged messages fail authorization. Entities were deleted afterwards.
+- Run the runner with `AGENT_WALLET_PRIVATE_KEY` set (plus `CAMPAIGN_REGISTRY_ADDRESS`, Arkiv writer/access key). Poll interval defaults to 15 s so Arkiv indexing (about 0.4 s observed) finishes before the next read; an Arkiv lag longer than the interval could produce a duplicate round, which the engine ignores.
+
 ## Not built / not verified
-Everything above is design until marked otherwise in `PROJECT_STATUS.md`. Not covered: collusion, spam threads (we ignore unverified messages but they still cost readers a query), multi-campaign bundles, a UI (needs an "agent activity" screen from Member 3).
+Not verified: the Claude note path against the real API (no key was available; the tests use a fake client), anything against a deployed `CampaignRegistry`, entity expiry. The model is optional and only writes the note sentence. Not covered: collusion, spam threads (we ignore unverified messages but they still cost readers a query), multi-campaign bundles, a UI (needs an "agent activity" screen from Member 3).
