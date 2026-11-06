@@ -6,6 +6,7 @@ import { campaignRegistryAbi, createOrderRequest, numaRouterAbi, relayRequest, w
 import { loadEnv, type Env } from "./config/env.js";
 import { OrderSigner } from "@numa/sdk-server";
 import { Relayer, RelayError } from "./services/relayer.js";
+import { reconcileSent } from "./services/reconciler.js";
 import { MemoryRelayStore } from "./services/store.js";
 import pg from "pg";
 import { migrate } from "./db/migrate.js";
@@ -27,6 +28,7 @@ export function buildServer(env: Env) {
     app.addHook("onReady", async () => { const done = await migrate(pool); if (done.length) app.log.info({ migrations: done }); });
     app.addHook("onClose", async () => { await pool.end(); });
   } else app.log.warn("DATABASE_URL not set: relayer limits and indexer cursor are in-memory");
+  const relayStore = pool ? new PgRelayStore(pool) : new MemoryRelayStore();
   const relayer = new Relayer(
     {
       router: env.NUMA_ROUTER_ADDRESS, registry: env.CAMPAIGN_REGISTRY_ADDRESS, chainId: env.WHITECHAIN_CHAIN_ID,
@@ -34,7 +36,7 @@ export function buildServer(env: Env) {
       dailyCapWei: parseEther(String(env.RELAYER_DAILY_CAP_WBT)),
       perAddressDailyLimit: env.RELAYER_PER_ADDRESS_DAILY_LIMIT,
     },
-    pub, wallet, relayerAccount, pool ? new PgRelayStore(pool) : new MemoryRelayStore(),
+    pub, wallet, relayerAccount, relayStore,
   );
   const orders = env.MERCHANT_SIGNER_KEY
     ? new OrderSigner(privateKeyToAccount(env.MERCHANT_SIGNER_KEY as `0x${string}`), env.WHITECHAIN_CHAIN_ID, env.NUMA_ROUTER_ADDRESS, env.ORDER_TTL_SECONDS)
@@ -67,6 +69,15 @@ export function buildServer(env: Env) {
     };
   });
 
+  // Frontend polling: what happened to this order's relay?
+  app.get("/relay/:orderId", async (req, reply) => {
+    const { orderId } = req.params as { orderId: string };
+    if (!/^0x[0-9a-fA-F]{64}$/.test(orderId)) return reply.code(400).send({ error: "invalid orderId" });
+    const c = await relayStore.getClaim(orderId as `0x${string}`);
+    if (!c) return reply.code(404).send({ error: "unknown order" });
+    return { orderId: c.orderId, status: c.status, txHash: c.txHash, explorer: c.txHash ? `${whitechainSepolia.blockExplorers.default.url}/tx/${c.txHash}` : null };
+  });
+
   app.post("/relay", async (req, reply) => {
     const p = relayRequest.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "invalid request", issues: p.error.issues });
@@ -79,6 +90,19 @@ export function buildServer(env: Env) {
       return reply.code(500).send({ error: "INTERNAL" });
     }
   });
+
+  // Resolve relays whose outcome was never recorded (timeouts, crashes) from chain receipts.
+  {
+    let rt: ReturnType<typeof setInterval> | undefined;
+    app.addHook("onReady", async () => {
+      let busy = false;
+      rt = setInterval(async () => {
+        if (busy) return; busy = true;
+        try { await reconcileSent(relayStore, pub, {}, (o) => app.log.info(o)); } catch (e) { app.log.error(e, "reconcile failed"); } finally { busy = false; }
+      }, 15_000);
+    });
+    app.addHook("onClose", async () => { if (rt) clearInterval(rt); });
+  }
 
   // Arkiv-backed features (conversion indexer + reputation) need the Numa writer wallet.
   if (env.ARKIV_WRITER_PRIVATE_KEY) {
