@@ -79,7 +79,7 @@ forge script script/Deploy.s.sol:DeployScript \
 9. [ ] **Event indexing**: confirm the backend indexer (`apps/api`) picks up the `OrderSettled`
        event and reflects it via `/creators/:addr/reputation` or equivalent read endpoint — this
        is the first time the indexer runs against a *real* emitted event rather than a
-       synthetic/mocked log (see `docs/PROJECT_STATUS.md` → Interface reconciliation).
+       synthetic/mocked log (see `docs/PROJECT_STATUS.md` → Backend interface reconciliation).
 
 ## 4. Refund scenario (separate test order)
 

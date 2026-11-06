@@ -14,8 +14,11 @@ Address `0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7` (from the brief) — checke
 - Implementation bytecode contains selectors for `receiveWithAuthorization` (both `v,r,s` 0xef55bec6 and `bytes signature` 0x88b7ab63), `transferWithAuthorization`, `authorizationState`, `permit`, `nonces`, `DOMAIN_SEPARATOR`, `mint`.
 - EIP-712 domain (derived and matched against `DOMAIN_SEPARATOR()`): `name="Tether USD"`, `version="1"`, `chainId=1874`, `verifyingContract=<proxy address>`.
 
-**Conclusion:** EIP-3009 gasless flow is feasible. Still to prove with a real `receiveWithAuthorization` tx (Phase 3). Note: `receiveWithAuthorization` requires `msg.sender == to`, so NumaRouter must be the caller and recipient.
+**Conclusion:** EIP-3009 gasless flow is feasible. Still to prove with a real `receiveWithAuthorization` transfer through a deployed router. Note: `receiveWithAuthorization` requires `msg.sender == to`, so NumaRouter must be the caller and recipient.
 Not yet verified: explorer-published source for the implementation; WBT faucet steps (see `.agents/skills/whitechain-dev/references/claim-testnet-wbt.md`).
 
 ## Deploy
 Use Foundry keystore (`cast wallet import <name> --interactive`) — run by a human. See `.agents/skills/whitechain-dev/references/deploy-contract.md`.
+
+## Deployment status
+Not deployed yet. Contract addresses will go in `packages/shared/src/addresses.ts` and `.env` after the first deployment (`DEPLOYMENT_CHECKLIST.md`).
