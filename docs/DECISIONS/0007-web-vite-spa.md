@@ -1,4 +1,4 @@
-# ADR 0005 — `apps/web` starts as a Vite + React SPA (not Next.js)
+# ADR 0007 — `apps/web` starts as a Vite + React SPA (not Next.js)
 **Status: Proposed (Member 3, needs team review).**
 
 **Context.** The brief lists Next.js for the frontend. The visual design was produced in Figma Make, which exports a React 19 + Vite + Tailwind v4 app. Every screen exists today as a mock-driven single-page app (client-side view switching, no server rendering, no API calls).
