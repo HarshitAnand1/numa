@@ -1,0 +1,467 @@
+/* Motion layer. Easings/durations follow the design brief:
+   expo-out .19,1,.22,1 default; snap 1,.26,0,1 for overlays; 150/300/500/700ms. */
+
+/* ---------- Intro loader: wordmark draws in letter by letter ---------- */
+.loader {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--pure);
+  transition: transform 0.7s var(--snap);
+}
+.loader.out {
+  transform: translateY(-100%);
+}
+.loader-word {
+  display: flex;
+  font: 900 clamp(88px, 22vw, 300px) / 1 "Unbounded";
+  letter-spacing: -0.04em;
+  gap: 0.02em;
+  overflow: hidden;
+  padding: 0 0.08em 0.06em 0;
+}
+.loader-word span {
+  display: inline-block;
+  transform: translateY(110%);
+  animation: letterIn 0.7s var(--expo) forwards;
+  animation-delay: calc(var(--i) * 140ms + 100ms);
+}
+.loader-word span:nth-child(2) {
+  color: var(--green);
+}
+.loader-bar {
+  position: absolute;
+  left: 4.45vw;
+  right: 4.45vw;
+  bottom: 6vh;
+  display: flex;
+  justify-content: space-between;
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.1em;
+  color: var(--grey);
+}
+.loader-bar i {
+  position: absolute;
+  left: 0;
+  top: -14px;
+  height: 2px;
+  width: 100%;
+  background: var(--green);
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: load 1.3s var(--expo) 0.1s forwards;
+}
+@keyframes letterIn {
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes load {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ---------- Split-letter headline ---------- */
+.ch-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+.ch {
+  display: inline-block;
+  transform: translateY(112%);
+}
+.is-ready .ch {
+  animation: letterIn 0.9s var(--expo) forwards;
+  animation-delay: calc(var(--i) * 40ms + 150ms);
+}
+.hero-meta,
+.hero-sub,
+.hero-ctas,
+.hero-aside {
+  opacity: 0;
+  translate: 0 30px;
+}
+.is-ready .hero-meta,
+.is-ready .hero-sub,
+.is-ready .hero-ctas,
+.is-ready .hero-aside {
+  animation: rise 0.9s var(--expo) forwards;
+}
+.is-ready .hero-meta {
+  animation-delay: 0.05s;
+}
+.is-ready .hero-sub {
+  animation-delay: 1.2s;
+}
+.is-ready .hero-ctas {
+  animation-delay: 1.35s;
+}
+.is-ready .hero-aside {
+  animation-delay: 1.5s;
+}
+@keyframes rise {
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* "$0." slams in last, with a tiny screen shake */
+.hero h1 .stamp {
+  opacity: 0;
+}
+.is-ready .hero h1 .stamp {
+  animation: slam 0.7s var(--expo) 1s forwards;
+}
+.is-ready .hero {
+  animation: shake 0.35s linear 1.12s;
+}
+@keyframes slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.7) rotate(-14deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-4deg);
+  }
+}
+@keyframes shake {
+  20% {
+    transform: translate(-5px, 3px);
+  }
+  40% {
+    transform: translate(4px, -3px);
+  }
+  60% {
+    transform: translate(-3px, 2px);
+  }
+  80% {
+    transform: translate(2px, -1px);
+  }
+}
+
+/* ---------- Scroll reveals (translate property so rotations survive) ---------- */
+.rv {
+  opacity: 0;
+  translate: 0 40px;
+  transition:
+    opacity 0.9s var(--expo),
+    translate 0.9s var(--expo);
+  transition-delay: calc(var(--rv, 0) * 80ms);
+}
+.rv.in {
+  opacity: 1;
+  translate: 0 0;
+}
+.js-ready .io-ticket {
+  opacity: 0;
+}
+.io-ticket.in {
+  opacity: 1;
+  animation: print 0.9s var(--expo) 0.2s backwards;
+}
+.io-stamp.in .stamp {
+  animation: slam 0.7s var(--expo) 0.9s backwards;
+}
+
+/* Scroll-scrubbed pieces: [data-scrub] gets --p (0..1) from JS */
+.split-title span,
+.split-title strong {
+  display: block;
+  transform: translateX(calc((0.5 - var(--p, 0.5)) * 14vw));
+}
+
+/* Comparison: bot side stays stuck at $0.00 and glitches */
+.click-side .zero {
+  position: relative;
+  animation: glitch 3.2s steps(1) infinite;
+}
+@keyframes glitch {
+  0%,
+  86%,
+  100% {
+    text-shadow: none;
+    translate: 0 0;
+  }
+  88% {
+    text-shadow:
+      4px 0 var(--bone),
+      -4px 0 var(--pure);
+    translate: 3px 0;
+  }
+  91% {
+    text-shadow:
+      -5px 0 var(--bone),
+      5px 0 var(--pure);
+    translate: -4px 1px;
+  }
+  94% {
+    text-shadow: 3px 0 var(--pure);
+    translate: 0 -2px;
+  }
+}
+.click-side > b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Nav: segmented role switch with sliding highlight ---------- */
+.role-switch {
+  position: relative;
+  height: 38px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.role-switch button {
+  position: relative;
+  z-index: 1;
+  width: auto;
+  padding: 0 12px;
+  font: 600 10px "JetBrains Mono";
+  letter-spacing: 0.06em;
+  transition: color 0.3s var(--expo);
+}
+.role-switch button.active,
+.role-switch button:hover {
+  background: none;
+  color: var(--black);
+}
+.role-switch:not([data-role]) button:hover,
+.role-switch[data-role=""] button:hover {
+  color: var(--bone);
+}
+.role-switch button.active {
+  color: var(--black);
+}
+.role-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  background: var(--bone);
+  opacity: 0;
+  transition:
+    transform 0.5s var(--expo),
+    opacity 0.3s;
+}
+.role-switch[data-role="m"] .role-thumb {
+  opacity: 1;
+}
+.role-switch[data-role="c"] .role-thumb {
+  opacity: 1;
+  transform: translateX(100%);
+}
+
+/* ---------- Menu: lines slide away, links rise with stagger ---------- */
+.menu-button span {
+  transition:
+    transform 0.5s var(--snap),
+    opacity 0.3s;
+}
+.menu-button[aria-expanded="true"] span {
+  transform: translateX(-34px);
+  opacity: 0;
+}
+.menu-button[aria-expanded="true"] span + span {
+  transition-delay: 0.08s;
+}
+.menu-links button {
+  overflow: hidden;
+  animation: rise 0.8s var(--expo) both;
+  animation-delay: calc(var(--i) * 55ms + 250ms);
+  translate: 0 0;
+  opacity: 0;
+}
+.menu-overlay {
+  animation-duration: 0.6s;
+  animation-timing-function: var(--snap);
+}
+
+/* ---------- Page transition: black wipe from the bottom ---------- */
+.page-wipe {
+  position: fixed;
+  z-index: 150;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--pure);
+  font: 900 14vw / 1 "Unbounded";
+  letter-spacing: -0.11em;
+  color: var(--green);
+  pointer-events: none;
+  transform: translateY(100%);
+}
+.page-wipe.in {
+  transform: translateY(0);
+  transition: transform 0.5s var(--snap);
+  pointer-events: all;
+}
+.page-wipe.out {
+  transform: translateY(-100%);
+  transition: transform 0.5s var(--snap);
+}
+
+/* ---------- Custom cursor (fine pointers only) ---------- */
+.cursor-dot,
+.cursor-ring {
+  position: fixed;
+  z-index: 300;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  display: none;
+}
+@media (pointer: fine) {
+  .has-cursor,
+  .has-cursor button,
+  .has-cursor a,
+  .has-cursor summary {
+    cursor: none;
+  }
+  .has-cursor input,
+  .has-cursor select {
+    cursor: text;
+  }
+  .cursor-dot,
+  .cursor-ring {
+    display: grid;
+  }
+}
+.cursor-dot {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--green);
+  mix-blend-mode: normal;
+}
+.cursor-ring {
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  place-items: center;
+  border: 1px solid var(--bone);
+  border-radius: 50%;
+  font: 600 10px "JetBrains Mono";
+  letter-spacing: 0.06em;
+  color: var(--black);
+  white-space: nowrap;
+  transition:
+    width 0.4s var(--expo),
+    height 0.4s var(--expo),
+    margin 0.4s var(--expo),
+    background 0.3s,
+    border-color 0.3s;
+}
+.cursor-ring.grow {
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-color: var(--green);
+}
+.cursor-ring.label {
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  background: var(--green);
+  border-color: var(--green);
+}
+.cursor-ring span {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.cursor-ring.label span {
+  opacity: 1;
+}
+
+/* ---------- Footer wordmark: full width, cropped by the bottom edge ---------- */
+.footer-word {
+  opacity: 0.9;
+  color: var(--bone);
+  transform: translateY(calc((1 - var(--p, 1)) * 6vw));
+}
+
+/* ---------- Animated film grain (8fps) ---------- */
+.app::after {
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  opacity: 0.05;
+  animation: grain 1s steps(8) infinite;
+}
+@keyframes grain {
+  0% {
+    transform: translate(0, 0);
+  }
+  12% {
+    transform: translate(-6%, -9%);
+  }
+  25% {
+    transform: translate(-14%, 5%);
+  }
+  37% {
+    transform: translate(8%, -14%);
+  }
+  50% {
+    transform: translate(-6%, 14%);
+  }
+  62% {
+    transform: translate(-14%, 8%);
+  }
+  75% {
+    transform: translate(12%, 0);
+  }
+  87% {
+    transform: translate(0, 12%);
+  }
+  100% {
+    transform: translate(-8%, -4%);
+  }
+}
+
+/* ---------- Reduced motion: only quick fades remain ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .loader,
+  .page-wipe,
+  .cursor-swarm,
+  .app::after {
+    display: none !important;
+  }
+  .ch,
+  .rv,
+  .hero-meta,
+  .hero-sub,
+  .hero-ctas,
+  .hero-aside,
+  .hero h1 .stamp,
+  .io-ticket {
+    opacity: 1 !important;
+    transform: none !important;
+    translate: none !important;
+  }
+  .hero h1,
+  .hero-word,
+  .split-title span,
+  .split-title strong,
+  .footer-word {
+    transform: none !important;
+    opacity: 1;
+  }
+  .real-signal .hand,
+  .real-signal b,
+  .real-signal small {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
