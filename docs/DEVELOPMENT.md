@@ -23,6 +23,7 @@ Workstream branches: `feat/contracts` (Member 1), `feat/backend-relayer` and sho
 | `pnpm --filter @numa/arkiv seed:demo [-- --yes]` | publish `[DEMO]` marketplace data to Rabdi (dry run without `--yes`) |
 | `pnpm --filter @numa/arkiv live:check [-- --check]` | live Arkiv round trip for every entity type, then cleanup |
 | `pnpm --filter @numa/arkiv live:agents` | live round trip for the negotiation-agent entities, then cleanup |
+| `pnpm --filter @numa/arkiv live:browser` | live writes through a stand-in injected wallet (the browser write path), then cleanup |
 
 The `live:*` and `seed:*` scripts read keys from `.env` (`ARKIV_WRITER_PRIVATE_KEY`, `ARKIV_TEST_MERCHANT_KEY`, `ARKIV_TEST_CREATOR_KEY`, `ARKIV_ACCESS_KEY`) and spend a few thousandths of tGLM.
 
