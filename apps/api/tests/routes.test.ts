@@ -44,7 +44,7 @@ function app(rows: Record<string, unknown[]>, opts: { registryMerchant?: string 
     readContract: vi.fn().mockResolvedValue({ merchant: opts.registryMerchant ?? merchant, payoutSigner: merchant, commissionBps: 800n, endsAt: 9_999_999_999n, paused: false, exists: true }),
   } as never;
   const a = Fastify();
-  registerDiscoveryRoutes(a, { arkiv: fakeArkiv(rows), pub, router, writer, ...(opts.registryMerchant !== undefined || true ? { registry } : {}), cache: new Map(), now: () => 1_000 });
+  registerDiscoveryRoutes(a, { arkiv: fakeArkiv(rows), pub, router, writer, registry, cache: new Map(), now: () => 1_000 });
   return a;
 }
 

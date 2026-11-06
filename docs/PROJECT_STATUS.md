@@ -54,3 +54,6 @@ Built and tested offline: `numa.profile`, `numa.invite`, `numa.endorsement`; cre
 
 ## Arkiv live readiness (Member 2)
 Rabdi-safe writer built (5 tests). Three dev wallets generated locally into `.env` (writer / test merchant / test creator; addresses only in `live:check` output). `live:check --check` confirmed Rabdi chain 7794095 and 1 gwei gas; **Update 2026-11-06: funded and run — `live:check` passed 7/7 on Rabdi** (see `ARKIV.md` → Verified). The writer is the team's own funded Arkiv account; the two test wallets are throwaway.
+
+## Backend foundation additions (Member 2)
+Done and tested locally: relay-outcome tracking + chain reconciler (`GET /relay/:orderId`), attribution-link click tracker + stats + `demo:fake-clicks` script (ran 500 clicks against a live local server), automatic release keeper (queue + chain-time checks + no double sends), Arkiv live checks for sorting/pagination (9/9 on Rabdi), API Dockerfile (built, run, healthy), ESLint (clean), CI workflow (YAML-validated only, not yet run on GitHub). 70 API tests + 26 arkiv + 5 sdk-server + 2 shared. **Still unverified live:** the keeper, reconciler and click stats have never run against a deployed router; they depend on the Whitechain deployment.
