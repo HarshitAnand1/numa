@@ -11,6 +11,7 @@
     "live:check": "node --env-file=../../.env --import tsx scripts/live-check.ts",
     "query:example": "node --env-file=../../.env --import tsx scripts/example-query.ts",
     "live:agents": "node --env-file=../../.env --import tsx scripts/live-agents.ts",
+    "live:browser": "node --env-file=../../.env --import tsx scripts/live-browser.ts",
     "seed:demo": "node --env-file=../../.env --import tsx scripts/seed-demo.ts"
   },
   "dependencies": {
