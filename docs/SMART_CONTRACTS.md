@@ -1,11 +1,8 @@
 # Smart Contracts
 
-Owner: Member 1 (`packages/contracts`, branch `feat/contracts`). Status: implemented and tested
-on a local Foundry chain (49/49 tests passing, including two 512-run fuzz invariants). **Not yet
-deployed to Whitechain Sepolia** — see "Deployment" below and `docs/PROJECT_STATUS.md`. **Not yet
-integrated with the backend/relayer** — see `docs/PROJECT_STATUS.md` → "Interface reconciliation"
-for a list of concrete gaps between this implementation and the backend's pre-implementation
-proposal (`packages/shared/src/order.ts`, `abi.ts`).
+Owner: Member 1 (`packages/contracts`, branch `feat/contracts`). Status: implemented and tested on a local Foundry chain (55 tests, including two 512-run fuzz invariants). **Not yet deployed to Whitechain Sepolia** (see "Deployment" below and `docs/DEPLOYMENT_CHECKLIST.md`). The backend's interface has been reconciled with these contracts (`docs/PROJECT_STATUS.md` → "Backend interface reconciliation") and verified with unit and mocked-chain tests; the full path through a deployed router has never been run.
+
+**Key facts for integrators:** commission is set per campaign (`createCampaign`, immutable); `approveCreator(campaignId, creator)` only whitelists a creator and carries no rate; a merchant cannot approve itself as a creator; the buyer's EIP-3009 nonce must equal the `OrderCommitment` digest (ADR 0005).
 
 ## Contracts
 
@@ -26,7 +23,7 @@ Holds campaign terms and creator approvals. Holds no funds.
   `isSettleable(campaignId) -> bool`: public views. **Note:** there is no `merchantOf(campaignId)`
   function — the merchant address is a field on the `Campaign` struct returned by `getCampaign`
   (`getCampaign(campaignId).merchant`). An earlier backend proposal assumed a `merchantOf`
-  function that was never implemented; see `docs/PROJECT_STATUS.md` → "Interface reconciliation."
+  function that was never implemented; see `docs/PROJECT_STATUS.md` → "Backend interface reconciliation."
 - `isSettleable(campaignId) -> bool`: `exists && !paused && block.timestamp <= endsAt`. NumaRouter
   checks this before every settlement.
 
@@ -104,7 +101,7 @@ commission to the creator, marks the order released. Reverts on a second call.
 
 Indexed-parameter positions matter for any code decoding these events by topic position rather
 than by field name — an earlier backend ABI proposal indexed `creator` instead of `merchant` as
-the third `OrderSettled` topic; see `docs/PROJECT_STATUS.md` → "Interface reconciliation."
+the third `OrderSettled` topic; see `docs/PROJECT_STATUS.md` → "Backend interface reconciliation."
 
 ABIs are exported to `packages/shared/src/abis/` (`CampaignRegistry.json`, `NumaRouter.json`),
 regenerated from `packages/contracts/out/` after any contract change. TypeScript mirrors of the

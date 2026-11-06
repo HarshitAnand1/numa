@@ -1,4 +1,4 @@
-# ADR 0006 — Negotiation agents coordinate on Arkiv; no contract changes
+# ADR 0008 — Negotiation agents coordinate on Arkiv; no contract changes
 **Status: Proposed (Member 2). Needs team review before the pitch mentions it.**
 
 **Context.** Offers, decisions and invites already live in Arkiv as wallet-owned entities. A creator and a merchant currently settle terms by hand. We want optional AI agents that negotiate the commission rate on each party's behalf.
