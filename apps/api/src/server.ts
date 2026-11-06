@@ -15,6 +15,11 @@ import { createArkivReader, createArkivWriter } from "@numa/arkiv";
 import { arkivConversionSink } from "./integrations/arkivSink.js";
 import { Indexer, MemoryCursor } from "./services/indexer.js";
 import { registerDiscoveryRoutes } from "./routes/discovery.js";
+import { registerClickRoutes, type ClickDeps } from "./routes/clicks.js";
+import { MemoryClickStore } from "./services/clicks.js";
+import { PgClickStore } from "./db/pgStore.js";
+import { creatorReputation } from "./services/reputationService.js";
+import { resolveLink } from "@numa/arkiv";
 
 export function buildServer(env: Env) {
   const app = Fastify({ logger: { redact: ["req.headers.authorization"] } });
@@ -104,6 +109,9 @@ export function buildServer(env: Env) {
     app.addHook("onClose", async () => { if (rt) clearInterval(rt); });
   }
 
+  let linkOwnedBy: ClickDeps["linkOwnedBy"];
+  let settledFor: ClickDeps["settledFor"];
+
   // Arkiv-backed features (conversion indexer + reputation) need the Numa writer wallet.
   if (env.ARKIV_WRITER_PRIVATE_KEY) {
     const writerAccount = privateKeyToAccount(env.ARKIV_WRITER_PRIVATE_KEY as `0x${string}`);
@@ -120,8 +128,21 @@ export function buildServer(env: Env) {
     });
     app.addHook("onClose", async () => { if (timer) clearInterval(timer); });
 
+    linkOwnedBy = async (p) => !!(await resolveLink(reader, { code: p.code, campaignId: p.campaignId, expectedCreator: p.creator }));
+    const settleCache = new Map();
+    settledFor = async ({ creator, campaignId }) => {
+      const { verified } = await creatorReputation({ arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address, cache: settleCache }, creator);
+      const live = verified.filter((v) => v.campaignId === campaignId && v.status !== "refunded");
+      return { verifiedConversions: live.length, grossSettled: live.reduce((a, v) => a + v.gross, 0n), commissionEarned: live.reduce((a, v) => a + v.commission, 0n) };
+    };
     registerDiscoveryRoutes(app, { arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address, ...(env.CAMPAIGN_REGISTRY_ADDRESS && { registry: env.CAMPAIGN_REGISTRY_ADDRESS }), cache: new Map() });
   }
+
+  registerClickRoutes(app, {
+    clicks: pool ? new PgClickStore(pool) : new MemoryClickStore(), checkoutBaseUrl: env.CHECKOUT_BASE_URL,
+    clickRateLimitPerMinute: env.CLICK_RATE_LIMIT_PER_MINUTE, visitorSecret: env.CLICK_VISITOR_SECRET,
+    ...(linkOwnedBy && { linkOwnedBy }), ...(settledFor && { settledFor }),
+  });
   return app;
 }
 

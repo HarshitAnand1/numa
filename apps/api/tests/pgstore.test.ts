@@ -1,7 +1,7 @@
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "../src/db/migrate.js";
-import { PgCursorStore, PgRelayStore } from "../src/db/pgStore.js";
+import { PgClickStore, PgCursorStore, PgRelayStore } from "../src/db/pgStore.js";
 
 // Integration test: runs only when TEST_DATABASE_URL points at a disposable Postgres.
 const url = process.env.TEST_DATABASE_URL;
@@ -58,6 +58,13 @@ d("Postgres stores", () => {
     await s.incrementAddress(day, "0xabc");
     expect(await s.countForAddress(day, "0xAbC")).toBe(2);
     expect(await s.spentToday("none")).toBe(0n);
+  });
+  it("stores clicks and counts unique visitors", async () => {
+    const c = new PgClickStore(pool);
+    const code = `pg${run}`;
+    for (let i = 0; i < 6; i++) await c.record(code, `v${i % 3}`);
+    expect(await c.stats(code)).toEqual({ clicks: 6, uniqueVisitors: 3 });
+    expect(await c.stats(`none${run}`)).toEqual({ clicks: 0, uniqueVisitors: 0 });
   });
   it("persists the indexer cursor", async () => {
     const c = new PgCursorStore(pool, `cur-${run}`, 41n);
