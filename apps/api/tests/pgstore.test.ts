@@ -1,7 +1,7 @@
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "../src/db/migrate.js";
-import { PgClickStore, PgCursorStore, PgRelayStore } from "../src/db/pgStore.js";
+import { PgClickStore, PgCursorStore, PgRelayStore, PgReleaseQueue } from "../src/db/pgStore.js";
 
 // Integration test: runs only when TEST_DATABASE_URL points at a disposable Postgres.
 const url = process.env.TEST_DATABASE_URL;
@@ -65,6 +65,21 @@ d("Postgres stores", () => {
     for (let i = 0; i < 6; i++) await c.record(code, `v${i % 3}`);
     expect(await c.stats(code)).toEqual({ clicks: 6, uniqueVisitors: 3 });
     expect(await c.stats(`none${run}`)).toEqual({ clicks: 0, uniqueVisitors: 0 });
+  });
+  it("release queue: idempotent add, due ordering, sent/cleared/done lifecycle", async () => {
+    const q = new PgReleaseQueue(pool);
+    const a = id(run + 40), b = id(run + 41);
+    await q.add(a, 1_000); await q.add(a, 9_999); await q.add(b, 2_000);
+    const due = (await q.listDue(1_500)).filter((x) => x.orderId === a || x.orderId === b);
+    expect(due).toEqual([{ orderId: a, paidAt: 1_000, txHash: null, attempts: 0 }]); // add is idempotent, b not yet due
+    await q.markSent(a, id(7));
+    expect((await q.listDue(1_500)).find((x) => x.orderId === a)?.txHash).toBe(id(7));
+    await q.clearSent(a, "reverted");
+    expect((await q.listDue(1_500)).find((x) => x.orderId === a)).toMatchObject({ txHash: null, attempts: 1 });
+    await q.markFailed(a, "sim failed");
+    expect((await q.listDue(1_500)).find((x) => x.orderId === a)?.attempts).toBe(2);
+    await q.markDone(a);
+    expect((await q.listDue(5_000)).some((x) => x.orderId === a)).toBe(false);
   });
   it("persists the indexer cursor", async () => {
     const c = new PgCursorStore(pool, `cur-${run}`, 41n);

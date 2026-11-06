@@ -11,6 +11,15 @@ export interface ConversionSink {
 }
 export interface CursorStore { get(): Promise<bigint>; set(block: bigint): Promise<void> }
 
+/** Side effects run for every event, independent of Arkiv (e.g. queueing releases). Must be idempotent: ranges may be replayed. */
+export interface IndexerHooks {
+  settled?(e: { orderId: Hex; paidAt: number }): Promise<void>;
+  released?(e: { orderId: Hex }): Promise<void>;
+}
+
+/** Used when Arkiv is not configured: the indexer still drives hooks (release keeper) but mirrors nothing. */
+export const noopSink: ConversionSink = { get: async () => undefined, publish: async () => {}, setStatus: async () => {} };
+
 export class MemoryCursor implements CursorStore {
   constructor(private block = 0n) {}
   async get() { return this.block; }
@@ -29,6 +38,7 @@ export class Indexer {
     private readonly cursor: CursorStore,
     private readonly maxRange = 2_000n,
     private readonly confirmations = 1n,
+    private readonly hooks: IndexerHooks = {},
   ) {}
 
   /** Process one batch; returns number of events handled. */
@@ -47,13 +57,15 @@ export class Indexer {
     const tsCache = new Map<bigint, number>();
     for (const ev of events) {
       if (ev.eventName === "OrderSettled") {
-        if (await this.sink.get(ev.args.orderId)) continue;
         let ts = tsCache.get(ev.blockNumber!);
         if (ts === undefined) { ts = Number((await this.pub.getBlock({ blockNumber: ev.blockNumber! })).timestamp); tsCache.set(ev.blockNumber!, ts); }
+        await this.hooks.settled?.({ orderId: ev.args.orderId, paidAt: ts });
+        if (await this.sink.get(ev.args.orderId)) continue;
         const a = ev.args;
         await this.sink.publish({ creator: a.creator, merchant: a.merchant, campaignId: a.campaignId, gross: a.gross, commission: a.commission, status: "held", paidAt: ts, txHash: ev.transactionHash!, orderId: a.orderId });
         handled++;
       } else if (ev.eventName === "CommissionReleased") {
+        await this.hooks.released?.({ orderId: ev.args.orderId });
         await this.sink.setStatus(ev.args.orderId, "released"); handled++;
       } else if (ev.eventName === "OrderRefunded") {
         const c = await this.sink.get(ev.args.orderId);

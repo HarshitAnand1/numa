@@ -27,6 +27,7 @@ const schema = z.object({
   ARKIV_WRITER_PRIVATE_KEY: key.optional(),
   ARKIV_ACCESS_KEY: z.string().default(""),
   INDEXER_START_BLOCK: z.coerce.bigint().default(0n),
+  KEEPER_POLL_MS: z.coerce.number().int().positive().default(30_000),
   INDEXER_POLL_MS: z.coerce.number().int().positive().default(5000),
   CHECKOUT_BASE_URL: z.string().url().default("http://localhost:3000"),
   CLICK_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(3000),
