@@ -1,0 +1,563 @@
+/* Landing hero: fits one viewport, no overlaps. Replaces the first Figma Make hero. */
+
+.nav {
+  position: sticky;
+  top: 0;
+  height: 84px;
+  transition:
+    height 0.5s var(--expo),
+    background 0.3s;
+}
+.nav.scrolled {
+  height: 62px;
+  background: var(--pure);
+}
+.app {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+/* Bigger, heavier wordmark */
+.logo {
+  font-size: 46px;
+  letter-spacing: -0.07em;
+  transition: font-size 0.5s var(--expo);
+}
+.nav.scrolled .logo {
+  font-size: 34px;
+}
+.logo span {
+  position: relative;
+  text-shadow: 0 0 22px rgba(57, 255, 20, 0.35);
+}
+.logo span::after {
+  /* the "spray cut" through the u */
+  content: "";
+  position: absolute;
+  left: -4%;
+  right: -10%;
+  top: 56%;
+  height: 0.07em;
+  background: var(--black);
+  transform: rotate(-9deg);
+}
+
+.hero {
+  position: relative;
+  min-height: max(640px, calc(100svh - 112px));
+  padding: 26px 4.45vw 40px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+.hero-meta {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.hero-meta b {
+  color: var(--bone);
+  font-weight: 600;
+}
+.hero h1 {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  margin: 0;
+  font: 900 clamp(46px, 7.6vw, 118px) / 0.9 "Unbounded";
+  letter-spacing: -0.06em;
+  transform: scale(calc(1 - var(--p, 0) * 0.15));
+  transform-origin: left center;
+  opacity: calc(1 - var(--p, 0) * 1.1);
+}
+.hero h1 .line {
+  display: block;
+  white-space: nowrap;
+}
+.hero h1 .stamp {
+  font-size: 0.82em;
+  margin-left: 0.12em;
+  vertical-align: 0.02em;
+}
+.hero-lower {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 310px);
+  gap: 4vw;
+  align-items: end;
+}
+.hero-sub {
+  margin: 0 0 22px;
+  max-width: 520px;
+  color: var(--bone);
+  font-size: 18px;
+  line-height: 1.4;
+}
+.hero-sub em {
+  color: var(--grey);
+  font-style: normal;
+}
+.hero-ctas {
+  display: flex;
+  gap: 0;
+}
+.hero-ctas button {
+  width: 250px;
+  height: 92px;
+  padding: 14px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  overflow: hidden;
+  border: 1px solid var(--bone);
+  background: var(--bone);
+  color: var(--black);
+  text-align: left;
+  transition:
+    transform 0.3s var(--expo),
+    box-shadow 0.3s,
+    color 0.3s;
+}
+.hero-ctas button + button {
+  margin-left: -1px;
+  background: var(--black);
+  color: var(--bone);
+}
+.hero-ctas button::before {
+  /* fill wipe on hover */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--green);
+  transform: translateY(101%);
+  transition: transform 0.45s var(--expo);
+}
+.hero-ctas button:hover::before {
+  transform: translateY(0);
+}
+.hero-ctas button:hover {
+  z-index: 2;
+  color: var(--black);
+  box-shadow: 6px 6px 0 var(--red);
+}
+.hero-ctas button > * {
+  position: relative;
+  z-index: 1;
+}
+.hero-ctas small {
+  font: 10px "JetBrains Mono";
+}
+.hero-ctas span {
+  font: 800 19px "Unbounded";
+  letter-spacing: -0.04em;
+}
+.hero-ctas svg {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  transition: transform 0.4s var(--expo);
+}
+.hero-ctas button:hover svg {
+  transform: translateX(6px);
+}
+
+/* Right rail: separated by a rule, aligned on the same grid */
+.hero-aside {
+  min-height: 120px;
+  padding-left: 2.2vw;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+}
+.settled-today {
+  display: flex;
+  flex-direction: column;
+  font-family: "JetBrains Mono";
+}
+.settled-today small,
+.settled-today span {
+  color: var(--grey);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.settled-today b {
+  color: var(--green);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.settled-today b.tick {
+  animation: flash 0.9s var(--expo);
+}
+.real-signal {
+  position: absolute;
+  z-index: 3;
+  top: 40%;
+  right: 7vw;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  justify-content: start;
+  gap: 2px 12px;
+  transform: rotate(3deg);
+}
+.real-signal .hand {
+  grid-row: span 2;
+  color: var(--bone);
+  font-size: 54px;
+  line-height: 1;
+  filter: grayscale(1);
+  animation: sweep 8s var(--expo) infinite;
+}
+.real-signal b {
+  padding: 7px 9px;
+  background: var(--green);
+  color: var(--black);
+  font: 700 20px "JetBrains Mono";
+  animation: pop 8s var(--expo) infinite;
+  transform-origin: left bottom;
+}
+.real-signal b::after {
+  content: "";
+  position: absolute;
+  inset: -4px auto auto -4px;
+  width: 54px;
+  height: 54px;
+  border: 2px solid var(--green);
+  border-radius: 50%;
+  opacity: 0;
+  animation: ring 8s var(--expo) infinite;
+}
+.real-signal small {
+  font: 9px "JetBrains Mono";
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  animation: pop 8s var(--expo) infinite;
+}
+
+/* Giant outlined wordmark behind everything, parallax on scroll */
+.hero-word {
+  position: absolute;
+  z-index: 0;
+  left: -1.5vw;
+  bottom: -8.5vw;
+  font: 900 36vw / 0.8 "Unbounded";
+  letter-spacing: -0.12em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(236, 232, 225, 0.07);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  transform: translate(
+    calc(var(--mx, 0) * -1.6vw),
+    calc(var(--p, 0) * 9vw + var(--my, 0) * -1.1vw)
+  );
+}
+.hero-word i {
+  font-style: normal;
+  -webkit-text-stroke-color: rgba(57, 255, 20, 0.16);
+}
+
+.cursor-swarm {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.cursor-swarm span {
+  /* position + rotation are driven by useHeroFX */
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--red);
+  opacity: 0.32;
+  font: 26px "JetBrains Mono";
+  animation: none;
+  will-change: transform;
+}
+.pop-zero {
+  position: absolute;
+  z-index: 2;
+  color: var(--red);
+  font: 700 16px "JetBrains Mono";
+  letter-spacing: 0.04em;
+  translate: -50% -50%;
+  animation: floatZero 1s var(--expo) forwards;
+}
+@keyframes floatZero {
+  from {
+    opacity: 1;
+    scale: 1.5;
+  }
+  to {
+    opacity: 0;
+    scale: 1;
+    translate: -50% -190%;
+  }
+}
+
+@keyframes sweep {
+  0%,
+  8% {
+    transform: translate(-90px, 24px) rotate(-14deg);
+    opacity: 0;
+  }
+  22% {
+    transform: translate(0, 0) rotate(0);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  94%,
+  100% {
+    transform: translate(40px, -8px);
+    opacity: 0;
+  }
+}
+@keyframes pop {
+  0%,
+  22% {
+    opacity: 0;
+    transform: scale(0.4) translateY(8px);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  36%,
+  80% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  92%,
+  100% {
+    opacity: 0;
+    transform: scale(1) translateY(-10px);
+  }
+}
+@keyframes ring {
+  0%,
+  26% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  52%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+@keyframes flash {
+  0% {
+    color: var(--bone);
+    text-shadow: 0 0 18px var(--green);
+  }
+}
+
+@media (max-width: 900px) {
+  .nav {
+    height: 70px;
+  }
+  .logo {
+    font-size: 38px;
+  }
+  .hero {
+    padding: 22px 20px 28px;
+    min-height: 700px;
+  }
+  .hero-meta span:last-child {
+    display: none;
+  }
+  .hero h1 {
+    font-size: clamp(40px, 10.4vw, 90px);
+    padding: 70px 0 40px;
+  }
+  .hero-lower {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .real-signal {
+    position: relative;
+    top: auto;
+    right: auto;
+  }
+  .hero-aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 20px 0 0;
+    flex-direction: row;
+    align-items: center;
+    min-height: 0;
+  }
+  .hero-ctas button {
+    width: 50%;
+    height: 112px;
+  }
+  .hero-ctas span {
+    font-size: 15px;
+  }
+  .hero-word {
+    font-size: 52vw;
+    bottom: -4vw;
+  }
+}
+@media (max-width: 520px) {
+  .logo {
+    font-size: 34px;
+  }
+  .hero {
+    min-height: 680px;
+  }
+  .hero h1 {
+    font-size: 10.2vw;
+  }
+  .hero-sub {
+    font-size: 15px;
+  }
+  .settled-today b {
+    font-size: 26px;
+  }
+  .real-signal .hand {
+    font-size: 38px;
+  }
+  .hero-ctas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .hero-ctas button,
+  .hero-ctas button + button {
+    width: auto;
+    margin: 0;
+    padding: 11px;
+  }
+  .hero-ctas small {
+    font-size: 8px;
+  }
+  .hero-ctas span {
+    font-size: 13px;
+  }
+}
+
+/* Nav: keep pills on one line */
+.network-pill,
+.wallet-button,
+.role-switch button {
+  white-space: nowrap;
+}
+@media (min-width: 901px) {
+  .nav {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+}
+.desktop-nav button {
+  padding: 0 14px;
+}
+.desktop-nav button::after {
+  left: 14px;
+  right: 14px;
+}
+.nav-actions {
+  gap: 8px;
+}
+@media (max-width: 1180px) {
+  .network-pill {
+    display: none;
+  }
+}
+
+/* Footer: the wordmark runs the full width and is cropped only by the bottom edge */
+footer {
+  min-height: 0;
+  padding-bottom: 0;
+}
+.footer-bottom {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  margin-top: 90px;
+}
+.footer-word {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  display: block;
+  margin: 2.5vw 0 -2.2vw -0.5vw;
+  font: 900 26.5vw / 0.8 "Unbounded";
+  letter-spacing: -0.09em;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Menu overlay is green: invert the wordmark so the "u" stays visible, and fit long words */
+.menu-overlay .logo {
+  color: var(--black);
+}
+.menu-overlay .logo span {
+  color: var(--bone);
+  text-shadow: none;
+}
+.menu-overlay .logo span::after {
+  background: var(--green);
+}
+@media (max-width: 700px) {
+  .menu-links button {
+    gap: 14px;
+    font-size: clamp(28px, 8vw, 100px);
+  }
+  .menu-links {
+    margin-top: 5vh;
+  }
+}
+
+/* Hero depth + interaction */
+.real-signal {
+  translate: calc(var(--mx, 0) * -22px) calc(var(--my, 0) * -14px);
+}
+.hero h1 .ch {
+  transition:
+    translate 0.45s var(--expo),
+    rotate 0.45s var(--expo);
+}
+.hero h1.letters-free .ch-mask {
+  overflow: visible;
+}
+.hero h1 .stamp {
+  transition:
+    scale 0.35s var(--expo),
+    rotate 0.35s var(--expo);
+  cursor: pointer;
+}
+.hero h1 .stamp:hover {
+  scale: 1.1;
+  rotate: -4deg;
+}
+.hero h1 .stamp:active {
+  scale: 0.92;
+  rotate: 2deg;
+}
+.marquees {
+  transform: skewX(calc(var(--vel, 0) * -1deg));
+}
+
+.hero h1 {
+  user-select: none;
+}
