@@ -6,10 +6,14 @@ solc = "0.8.28"
 optimizer = true
 optimizer_runs = 200
 via_ir = true
+evm_version = "prague"
 remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/",
 ]
+# Deploy.s.sol writes a deployment manifest (addresses, config, block number) here after a
+# successful broadcast. Scoped to this directory only — no other filesystem write access granted.
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
 
 [fuzz]
 runs = 512

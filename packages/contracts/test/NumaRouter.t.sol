@@ -70,7 +70,11 @@ contract NumaRouterTest is Test {
     {
         return keccak256(
             abi.encode(
-                EIP712_DOMAIN_TYPEHASH, keccak256(bytes(name)), keccak256(bytes(version)), block.chainid, verifyingContract
+                EIP712_DOMAIN_TYPEHASH,
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                block.chainid,
+                verifyingContract
             )
         );
     }
@@ -111,8 +115,9 @@ contract NumaRouterTest is Test {
         bytes32 nonce,
         uint256 pk
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash =
-            keccak256(abi.encode(RECEIVE_WITH_AUTHORIZATION_TYPEHASH, from, to, value, validAfter, validBefore, nonce));
+        bytes32 structHash = keccak256(
+            abi.encode(RECEIVE_WITH_AUTHORIZATION_TYPEHASH, from, to, value, validAfter, validBefore, nonce)
+        );
         bytes32 domainSeparator = _domainSeparator("Mock Tether USD", "1", address(usdt));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(pk, digest);
@@ -350,11 +355,45 @@ contract NumaRouterTest is Test {
         returns (uint8 v, bytes32 r, bytes32 s)
     {
         bytes32 structHash = keccak256(
-            abi.encode(RECEIVE_WITH_AUTHORIZATION_TYPEHASH, order.buyer, address(r2), order.gross, 0, order.deadline, nonce)
+            abi.encode(
+                RECEIVE_WITH_AUTHORIZATION_TYPEHASH, order.buyer, address(r2), order.gross, 0, order.deadline, nonce
+            )
         );
         bytes32 domainSeparator = _domainSeparator("Mock Tether USD", "1", address(usdt));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(buyerPk, digest);
+    }
+
+    // ---------- constructor validation (pre-deployment audit fixes) ----------
+
+    function test_constructor_revertsOnEOAUsdt() public {
+        address eoa = makeAddr("notAContract");
+        vm.expectRevert("NumaRouter: usdt is not a contract");
+        new NumaRouter(eoa, address(registry), feeRecipient, FEE_BPS, REFUND_WINDOW);
+    }
+
+    function test_constructor_revertsOnEOARegistry() public {
+        address eoa = makeAddr("notAContract");
+        vm.expectRevert("NumaRouter: registry is not a contract");
+        new NumaRouter(address(usdt), eoa, feeRecipient, FEE_BPS, REFUND_WINDOW);
+    }
+
+    function test_constructor_revertsOnRefundWindowTooLong() public {
+        uint256 tooLong = 365 days + 1;
+        vm.expectRevert("NumaRouter: refund window too long");
+        new NumaRouter(address(usdt), address(registry), feeRecipient, FEE_BPS, tooLong);
+    }
+
+    function test_constructor_allowsExactlyMaxRefundWindow() public {
+        NumaRouter r = new NumaRouter(address(usdt), address(registry), feeRecipient, FEE_BPS, 365 days);
+        assertEq(r.refundWindow(), 365 days);
+    }
+
+    function test_constructor_allowsZeroRefundWindow() public {
+        // A refund window of 0 is a deliberate, documented product choice (e.g. a shortened demo
+        // window per initial-prompt.md) — the constructor only caps the upper bound, not a minimum.
+        NumaRouter r = new NumaRouter(address(usdt), address(registry), feeRecipient, FEE_BPS, 0);
+        assertEq(r.refundWindow(), 0);
     }
 
     // ---------- OrderCommitment / authNonce binding ----------
