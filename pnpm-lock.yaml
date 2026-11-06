@@ -121,6 +121,9 @@ importers:
       '@fontsource/unbounded':
         specifier: ^5.3.0
         version: 5.3.0
+      '@numa/arkiv':
+        specifier: workspace:*
+        version: link:../../packages/arkiv
       '@numa/sdk-react':
         specifier: workspace:*
         version: link:../../packages/sdk-react

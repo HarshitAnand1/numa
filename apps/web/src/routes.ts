@@ -17,6 +17,7 @@ export type View =
   | "demo"
   | "verify"
   | "system"
+  | "agents"
   | "notFound";
 
 export interface Route {
@@ -41,6 +42,7 @@ const STATIC: Record<string, View> = {
   "/demo-shop": "demo",
   "/verify": "verify",
   "/system-states": "system",
+  "/agents": "agents",
 };
 
 /** Unknown or malformed paths are a 404, never silently the home page. */
@@ -86,6 +88,8 @@ export function routeToPath(r: Route): string {
       return "/verify";
     case "system":
       return "/system-states";
+    case "agents":
+      return "/agents";
     case "notFound":
       return "/404";
   }
@@ -104,6 +108,7 @@ const TITLES: Record<View, string> = {
   demo: "demo shop",
   verify: "verify a sale — numa",
   system: "system states — numa",
+  agents: "agents — numa",
   notFound: "404 — numa",
 };
 
