@@ -6,7 +6,7 @@
 | 1 Research | Partial: Whitechain/USDT EIP-3009 and Arkiv SDK researched (`docs/ARKIV.md`). Refund funding model: TODO |
 | 2 Foundation | Partial: monorepo skeleton, Foundry + OpenZeppelin, compose, env. No app scaffolds, CI, lint yet |
 | 3 Contracts | Not started |
-| 4 Arkiv + backend | Partial (branch `feat/backend-relayer`, uncommitted): shared protocol types, order signing service, relayer with guards, API server, 17 unit tests passing with mocked chain clients. `packages/arkiv` implemented against SDK 1.0.1 (schemas, publish/query, owner checks; offline tests only, no live write yet). Indexer, reputation, Postgres: TODO |
+| 4 Arkiv + backend | Partial (branch `feat/backend-relayer`, uncommitted): shared protocol types, order signing service, relayer with guards, API server, 17 unit tests passing with mocked chain clients. `packages/arkiv` implemented against SDK 1.0.1 (schemas, publish/query, owner checks; offline tests only, no live write yet). Conversion verifier, reputation scoring, event indexer (Arkiv sink), `/creators/:addr/reputation` built and unit-tested against synthetic ABI-encoded logs (34 tests total). **Never run against a real router or live Arkiv.** In-memory cursor/relayer state; Postgres: TODO |
 | 5 Frontend | Not started |
 | 6 SDK + demo shop | Not started |
 | 7 E2E | Not started |

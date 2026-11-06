@@ -7,6 +7,11 @@ import { loadEnv, type Env } from "./config/env.js";
 import { OrderService } from "./services/orders.js";
 import { Relayer, RelayError } from "./services/relayer.js";
 import { MemoryRelayStore } from "./services/store.js";
+import { isAddress } from "viem";
+import { createArkivReader, createArkivWriter } from "@numa/arkiv";
+import { arkivConversionSink } from "./integrations/arkivSink.js";
+import { Indexer, MemoryCursor } from "./services/indexer.js";
+import { creatorReputation } from "./services/reputationService.js";
 
 export function buildServer(env: Env) {
   const app = Fastify({ logger: { redact: ["req.headers.authorization"] } });
@@ -59,6 +64,30 @@ export function buildServer(env: Env) {
       return reply.code(500).send({ error: "INTERNAL" });
     }
   });
+
+  // Arkiv-backed features (conversion indexer + reputation) need the Numa writer wallet.
+  if (env.ARKIV_WRITER_PRIVATE_KEY) {
+    const writerAccount = privateKeyToAccount(env.ARKIV_WRITER_PRIVATE_KEY as `0x${string}`);
+    const reader = createArkivReader(env.ARKIV_ACCESS_KEY);
+    const writer = createArkivWriter({ account: writerAccount, accessKey: env.ARKIV_ACCESS_KEY });
+    const indexer = new Indexer(pub, env.NUMA_ROUTER_ADDRESS, arkivConversionSink(reader, writer, writerAccount.address), new MemoryCursor(env.INDEXER_START_BLOCK - 1n));
+    let timer: ReturnType<typeof setInterval> | undefined;
+    app.addHook("onReady", async () => {
+      let busy = false;
+      timer = setInterval(async () => {
+        if (busy) return; busy = true;
+        try { await indexer.tick((o) => app.log.info(o)); } catch (e) { app.log.error(e, "indexer tick failed"); } finally { busy = false; }
+      }, env.INDEXER_POLL_MS);
+    });
+    app.addHook("onClose", async () => { if (timer) clearInterval(timer); });
+
+    app.get("/creators/:address/reputation", async (req, reply) => {
+      const { address } = req.params as { address: string };
+      if (!isAddress(address)) return reply.code(400).send({ error: "invalid address" });
+      const { reputation: r, rejected } = await creatorReputation({ arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address }, address);
+      return { ...r, grossSettled: r.grossSettled.toString(), commissionEarned: r.commissionEarned.toString(), rejected };
+    });
+  }
   return app;
 }
 

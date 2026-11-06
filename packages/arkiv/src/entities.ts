@@ -118,3 +118,15 @@ export async function listConversions(r: ArkivReader, p: { creator: Address; wri
     commission: e.commission.value, status: e.status.value as ConversionStatus, paidAt: Number(e.paidAt.value), txHash: e.txHash.value as Hex, orderId: e.orderId.value as Hex,
   }));
 }
+
+/** Find the Numa-written conversion for an on-chain order (owner-checked). */
+export async function findConversion(r: ArkivReader, p: { orderId: Hex; writer: Address }) {
+  const res = await r.select().from(ConversionSchema).where(eq("orderId", p.orderId)).ownedBy(p.writer).limit(1).fetch();
+  const e = res.entities[0];
+  return e ? { entityKey: e.$key, gross: e.gross.value, status: e.status.value as ConversionStatus } : undefined;
+}
+
+/** Update a conversion's status (writer wallet only; other wallets' patches would not own the entity). */
+export async function updateConversionStatus(w: ArkivWriter, entityKey: Hex, status: ConversionStatus): Promise<void> {
+  await w.patchEntity(ConversionSchema, entityKey, { set: { status } });
+}

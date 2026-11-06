@@ -16,6 +16,11 @@ const schema = z.object({
   RELAYER_DAILY_CAP_WBT: z.coerce.number().positive(),
   RELAYER_PER_ADDRESS_DAILY_LIMIT: z.coerce.number().int().positive().default(5),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  /** Arkiv writer wallet for conversion entities (needs tGLM). Indexer + reputation are disabled without it. */
+  ARKIV_WRITER_PRIVATE_KEY: key.optional(),
+  ARKIV_ACCESS_KEY: z.string().default(""),
+  INDEXER_START_BLOCK: z.coerce.bigint().default(0n),
+  INDEXER_POLL_MS: z.coerce.number().int().positive().default(5000),
   ORDER_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 });
 export type Env = z.infer<typeof schema>;
