@@ -6,7 +6,7 @@
 | 1 Research | Partial: Whitechain/USDT EIP-3009 verified. Arkiv, refund funding model: TODO |
 | 2 Foundation | Partial: monorepo skeleton, Foundry + OpenZeppelin, compose, env. No app scaffolds, CI, lint yet |
 | 3 Contracts | Not started |
-| 4 Arkiv + backend | Not started |
+| 4 Arkiv + backend | Partial (branch `feat/backend-relayer`, uncommitted): shared protocol types, order signing service, relayer with guards, API server, 17 unit tests passing with mocked chain clients. Arkiv, indexer, reputation, Postgres: TODO |
 | 5 Frontend | Not started |
 | 6 SDK + demo shop | Not started |
 | 7 E2E | Not started |
@@ -16,3 +16,6 @@ Nothing is deployed. Gasless checkout is NOT yet demonstrated.
 ## Open decisions
 - Refund funding model (merchant net is paid instantly; refund needs merchant-approved USDT pull or escrow of refundable portion). Needs ADR.
 - Project name: **numa** (renamed from "Outcome" by the user; brief text still says Outcome — contract is `NumaRouter`).
+
+## Interface proposal awaiting Member 1
+`packages/shared/src/order.ts` and `abi.ts` define a PROPOSED `Order{campaignId,orderId,creator,amount,deadline}` (EIP-712 domain `NumaRouter`/`1`), auth nonce `keccak256(abi.encode(digest, creator))`, and `payOrder(order, merchantSig, buyer, validAfter, validBefore, v, r, s)`. The backend has never run against a real router; contracts must match or this changes.
