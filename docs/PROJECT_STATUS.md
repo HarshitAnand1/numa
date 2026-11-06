@@ -25,3 +25,6 @@ Written: DESIGN, ARCHITECTURE (Mermaid), SMART_CONTRACTS (design only), ARKIV, W
 
 ## SDK
 `@numa/sdk-server` (`Numa`, `OrderSigner`) built and unit-tested (5 tests); API uses it. `@numa/sdk-react` and `apps/demo-shop`: not started (Member 3).
+
+## Creator discovery layer (Member 2)
+Built and tested offline (43 API + 20 Arkiv tests): `numa.profile`, `numa.invite`, `numa.endorsement`; creator search, trending, recommendations, leaderboard, creator card, invite verification; endorsement and conversion verification against `OrderSettled`. **Not verified live:** no Arkiv write/read round trip yet; `CampaignRegistry.merchantOf` doesn't exist yet. Frontend for these: not started (Member 3).
