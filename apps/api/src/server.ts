@@ -16,6 +16,7 @@ import { arkivConversionSink } from "./integrations/arkivSink.js";
 import { Indexer, MemoryCursor, noopSink } from "./services/indexer.js";
 import { ReleaseKeeper } from "./services/keeper.js";
 import { MemoryReleaseQueue } from "./services/releaseQueue.js";
+import { registerCors } from "./routes/cors.js";
 import { registerDiscoveryRoutes } from "./routes/discovery.js";
 import { registerClickRoutes, type ClickDeps } from "./routes/clicks.js";
 import { MemoryClickStore } from "./services/clicks.js";
@@ -49,6 +50,8 @@ export function buildServer(env: Env) {
     ? new OrderSigner(privateKeyToAccount(env.MERCHANT_SIGNER_KEY as `0x${string}`), env.WHITECHAIN_CHAIN_ID, env.NUMA_ROUTER_ADDRESS, env.ORDER_TTL_SECONDS)
     : undefined;
 
+  const corsOrigins = env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+  if (corsOrigins.length) registerCors(app, corsOrigins);
   app.register(rateLimit, { max: env.RATE_LIMIT_PER_MINUTE, timeWindow: "1 minute" });
 
   app.get("/health", async () => ({
@@ -157,7 +160,7 @@ export function buildServer(env: Env) {
       const live = verified.filter((v) => v.campaignId === campaignId && v.status !== "refunded");
       return { verifiedConversions: live.length, grossSettled: live.reduce((a, v) => a + v.gross, 0n), commissionEarned: live.reduce((a, v) => a + v.commission, 0n) };
     };
-    registerDiscoveryRoutes(app, { arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address, ...(env.CAMPAIGN_REGISTRY_ADDRESS && { registry: env.CAMPAIGN_REGISTRY_ADDRESS }), cache: new Map() });
+    registerDiscoveryRoutes(app, { arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address, ...(env.CAMPAIGN_REGISTRY_ADDRESS && { registry: env.CAMPAIGN_REGISTRY_ADDRESS }), cache: new Map(), timeoutMs: env.DISCOVERY_TIMEOUT_MS });
   }
 
   registerClickRoutes(app, {

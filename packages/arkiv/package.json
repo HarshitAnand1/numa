@@ -8,7 +8,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "live:check": "node --env-file=../../.env --import tsx scripts/live-check.ts"
+    "live:check": "node --env-file=../../.env --import tsx scripts/live-check.ts",
+    "seed:demo": "node --env-file=../../.env --import tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@arkiv-network/sdk": "1.0.1",
