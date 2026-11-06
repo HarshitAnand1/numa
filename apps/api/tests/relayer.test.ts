@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { orderTypedData, type RelayRequest } from "@numa/shared";
+import { parseSignature } from "viem";
+import { deriveAuthNonce, orderDigest, orderTypedData, receiveAuthTypedData, type RelayRequest } from "@numa/shared";
 import { Relayer, RelayError, type RelayerConfig } from "../src/services/relayer.js";
 import { MemoryRelayStore } from "../src/services/store.js";
 
 const router = "0x1111111111111111111111111111111111111111" as const;
 const creator = "0x2222222222222222222222222222222222222222" as const;
-const buyer = "0x3333333333333333333333333333333333333333" as const;
+const buyerAcct = privateKeyToAccount(generatePrivateKey());
+const buyer = buyerAcct.address;
 const NOW = 1_000;
 const relayerAcct = privateKeyToAccount(generatePrivateKey());
 const merchant = privateKeyToAccount(generatePrivateKey());
@@ -15,7 +17,10 @@ const cfg: RelayerConfig = { router, chainId: 1874, maxGasPriceWei: 100n, dailyC
 async function makeReq(over: Partial<RelayRequest["order"]> = {}): Promise<RelayRequest> {
   const order = { campaignId: 1n, orderId: `0x${"01".repeat(32)}` as const, creator, amount: 5_000_000n, deadline: 2_000n, ...over };
   const merchantSig = await merchant.signTypedData(orderTypedData(order, 1874, router));
-  return { order, merchantSig, buyer, auth: { validAfter: 0n, validBefore: 5_000n, v: 27, r: `0x${"aa".repeat(32)}`, s: `0x${"bb".repeat(32)}` } };
+  const nonce = deriveAuthNonce(orderDigest(order, 1874, router), order.creator);
+  const sig = await buyerAcct.signTypedData(receiveAuthTypedData({ from: buyer, router, value: order.amount, validAfter: 0n, validBefore: 5_000n, nonce }, 1874));
+  const { r, s, v } = parseSignature(sig);
+  return { order, merchantSig, buyer, auth: { validAfter: 0n, validBefore: 5_000n, v: Number(v), r, s } };
 }
 
 function setup(pubOver: Record<string, unknown> = {}) {
@@ -63,6 +68,28 @@ describe("Relayer", () => {
   it("rejects malformed merchant signature", async () => {
     const { relayer } = setup();
     expect(await code(relayer.submit({ ...req, merchantSig: "0x1234" }))).toBe("BAD_MERCHANT_SIG");
+  });
+  it("rejects an authorization signed for a different amount, recipient window or signer", async () => {
+    const { relayer, pub } = setup();
+    // order amount differs from what the buyer authorized
+    const other = await makeReq();
+    expect(await code(relayer.submit({ ...other, order: { ...other.order, amount: other.order.amount + 1n } }))).toBe("BAD_BUYER_AUTH");
+    // different validBefore than signed
+    const w = await makeReq();
+    expect(await code(relayer.submit({ ...w, auth: { ...w.auth, validBefore: 4_000n } }))).toBe("BAD_BUYER_AUTH");
+    // signature from someone else
+    const stranger = privateKeyToAccount(generatePrivateKey());
+    const o = await makeReq();
+    const nonce = deriveAuthNonce(orderDigest(o.order, 1874, router), o.order.creator);
+    const bad = parseSignature(await stranger.signTypedData(receiveAuthTypedData({ from: buyer, router, value: o.order.amount, validAfter: 0n, validBefore: 5_000n, nonce }, 1874)));
+    expect(await code(relayer.submit({ ...o, auth: { ...o.auth, v: Number(bad.v), r: bad.r, s: bad.s } }))).toBe("BAD_BUYER_AUTH");
+    // rejected locally: no RPC calls were made
+    expect(pub.getGasPrice).not.toHaveBeenCalled();
+    expect(pub.simulateContract).not.toHaveBeenCalled();
+  });
+  it("rejects malformed auth signature values", async () => {
+    const { relayer } = setup();
+    expect(await code(relayer.submit({ ...req, auth: { ...req.auth, r: `0x${"00".repeat(32)}`, s: `0x${"00".repeat(32)}` } }))).toBe("BAD_BUYER_AUTH");
   });
   it("rejects duplicate in-flight and settled orders", async () => {
     const { relayer } = setup();

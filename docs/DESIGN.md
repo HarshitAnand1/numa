@@ -45,6 +45,9 @@ See `WHITECHAIN.md`. Chain 1874; USDT is an EIP-1967 proxy whose implementation 
 ## 11. Arkiv integration
 See `ARKIV.md`. Five wallet-owned entity types; Arkiv holds no funds or secrets; readers verify ownership.
 
+### 11a. Creator discovery layer [built, offline-tested]
+Arkiv is the marketplace's directory, not a cache: creators publish **profiles** (searchable, expiring, renewable), merchants publish **campaigns**, **invites** and **endorsements**, the Numa writer publishes **conversions**. The API only ever *verifies and ranks*: money facts come from `OrderSettled`, ownership from Arkiv owner + `CampaignRegistry.merchantOf`. Merchants search creators by niche/price/availability; creators get recommended campaigns and verified invites; everyone sees trending campaigns and a verified-sales leaderboard. See `ARKIV.md` for the trust table.
+
 ## 12. Contract architecture
 See `SMART_CONTRACTS.md`.
 

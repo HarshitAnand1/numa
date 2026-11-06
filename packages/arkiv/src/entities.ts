@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, type Expression } from "@arkiv-network/sdk/query";
+import { and, asc, desc, eq, gte, lte, type Expression } from "@arkiv-network/sdk/query";
 import { addr, key as keyVal, u64, u256 } from "@arkiv-network/sdk/schema";
 import type { Address, Hex } from "viem";
 import type { ArkivReader, ArkivWriter } from "./client.js";
@@ -67,7 +67,7 @@ export type ConversionStatus = "held" | "released" | "refunded" | "partially_ref
 
 // ---------- reads ----------
 
-export interface CampaignFilter { category?: string; region?: string; minCommissionBps?: number; maxCommissionBps?: number; endsAfter?: number; limit?: number; offset?: number }
+export interface CampaignFilter { category?: string; region?: string; minCommissionBps?: number; maxCommissionBps?: number; endsAfter?: number; /** "commission" = highest first, "endingSoon" = soonest end first */ sort?: "commission" | "endingSoon"; limit?: number; offset?: number }
 
 /** Active, not-yet-ended campaigns for discovery. */
 export async function listCampaigns(r: ArkivReader, f: CampaignFilter = {}, now = Math.floor(Date.now() / 1000)) {
@@ -76,7 +76,9 @@ export async function listCampaigns(r: ArkivReader, f: CampaignFilter = {}, now 
   if (f.region) preds.push(eq("region", f.region));
   if (f.minCommissionBps !== undefined) preds.push(gte("commissionBps", u64(BigInt(f.minCommissionBps))));
   if (f.maxCommissionBps !== undefined) preds.push(lte("commissionBps", u64(BigInt(f.maxCommissionBps))));
-  const res = await r.select().from(CampaignSchema).where(and(...preds) as never /* dynamic filter; all names are CampaignSchema columns */).limit(f.limit ?? 50).offset(f.offset ?? 0).fetch();
+  const base = r.select().from(CampaignSchema).where(and(...preds) as never /* dynamic filter; all names are CampaignSchema columns */);
+  const sorted = f.sort === "commission" ? base.orderBy(desc("commissionBps")) : f.sort === "endingSoon" ? base.orderBy(asc("endsAt")) : base;
+  const res = await sorted.limit(f.limit ?? 50).offset(f.offset ?? 0).fetch();
   return res.entities.map((e) => ({
     entityKey: e.$key, merchant: e.$owner, campaignId: e.campaignId.value, status: e.status.value, category: e.category.value,
     commissionBps: Number(e.commissionBps.value), endsAt: Number(e.endsAt.value), region: e.region.value, name: e.name.value, description: e.description.value,
@@ -129,4 +131,32 @@ export async function findConversion(r: ArkivReader, p: { orderId: Hex; writer: 
 /** Update a conversion's status (writer wallet only; other wallets' patches would not own the entity). */
 export async function updateConversionStatus(w: ArkivWriter, entityKey: Hex, status: ConversionStatus): Promise<void> {
   await w.patchEntity(ConversionSchema, entityKey, { set: { status } });
+}
+
+/**
+ * Every live offer. Offers expire after 72h, so "all live offers" is by construction the last 72 hours of
+ * creator interest — the signal behind trending campaigns. Pages by key so a concurrent write can't skip rows.
+ */
+export async function listLiveOffers(r: ArkivReader, maxPages = 5) {
+  const out: { entityKey: Hex; creator: Address; campaignId: bigint; askBps: number }[] = [];
+  for (let page = 0; page < maxPages; page++) {
+    const res = await r.select().from(OfferSchema).orderBy(asc("$key")).limit(100).offset(page * 100).fetch();
+    for (const e of res.entities) out.push({ entityKey: e.$key, creator: e.$owner, campaignId: e.campaignId.value, askBps: Number(e.askBps.value) });
+    if (res.entities.length < 100) break;
+  }
+  return out;
+}
+
+/** Largest conversions written by the Numa writer wallet, optionally for one campaign / since a time. Unverified: check against chain. */
+export async function topConversions(r: ArkivReader, p: { writer: Address; campaignId?: bigint; sinceUnix?: number; limit?: number }) {
+  const preds: Expression[] = [];
+  if (p.campaignId !== undefined) preds.push(eq("campaignId", u64(p.campaignId)));
+  if (p.sinceUnix !== undefined) preds.push(gte("paidAt", u64(BigInt(p.sinceUnix))));
+  const q = r.select().from(ConversionSchema);
+  const filtered = preds.length ? q.where(and(...preds) as never /* ConversionSchema columns */) : q;
+  const res = await filtered.ownedBy(p.writer).orderBy(desc("gross")).limit(p.limit ?? 100).fetch();
+  return res.entities.map((e) => ({
+    entityKey: e.$key, creator: e.creator.value, merchant: e.merchant.value, campaignId: e.campaignId.value, gross: e.gross.value,
+    commission: e.commission.value, status: e.status.value as ConversionStatus, paidAt: Number(e.paidAt.value), txHash: e.txHash.value as Hex, orderId: e.orderId.value as Hex,
+  }));
 }
