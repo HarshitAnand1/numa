@@ -22,3 +22,6 @@ Nothing is deployed. Gasless checkout is NOT yet demonstrated.
 
 ## Documentation
 Written: DESIGN, ARCHITECTURE (Mermaid), SMART_CONTRACTS (design only), ARKIV, WHITECHAIN, RELAYER, API, SECURITY, SDK (target design), DEVELOPMENT, DEMO (plan), DECISIONS 0001 (refund model, **Proposed**), 0002, 0003. Docs for unbuilt parts are labeled as plans.
+
+## SDK
+`@numa/sdk-server` (`Numa`, `OrderSigner`) built and unit-tested (5 tests); API uses it. `@numa/sdk-react` and `apps/demo-shop`: not started (Member 3).
