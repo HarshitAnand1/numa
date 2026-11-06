@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { expiries, listCampaigns, listConversions, listLiveOffers, topConversions, publishLink, publishOffer, resolveLink, type ArkivReader, type ArkivWriter } from "../src/index.js";
+import { expiries, listCampaigns, listConversions, listLiveOffers, listOffers, topConversions, publishLink, publishOffer, resolveLink, type ArkivReader, type ArkivWriter } from "../src/index.js";
 
 const creator = "0x2222222222222222222222222222222222222222" as const;
 const writer = "0x4444444444444444444444444444444444444444" as const;
@@ -98,5 +98,12 @@ describe("discovery queries", () => {
     const out = await listLiveOffers(b as unknown as ArkivReader);
     expect(out).toHaveLength(103);
     expect(call).toBe(2);
+  });
+  it("listOffers passes offset and sorts by key for stable pages", async () => {
+    const { reader, calls } = fakeReader([]);
+    await listOffers(reader, 7n, 2, 4);
+    expect(calls.offset).toEqual([[4]]);
+    expect(calls.limit).toEqual([[2]]);
+    expect(calls.orderBy).toHaveLength(1);
   });
 });

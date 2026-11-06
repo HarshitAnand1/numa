@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.env
+.env.*
+!.env.example
+**/out
+**/cache
+**/broadcast
+.claude
+.agents
+packages/contracts/lib

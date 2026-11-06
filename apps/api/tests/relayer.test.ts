@@ -142,9 +142,16 @@ describe("Relayer", () => {
     const { relayer } = setup({ getBalance: vi.fn().mockResolvedValue(10n) });
     expect(await code(relayer.submit(req))).toBe("INSUFFICIENT_RELAYER_BALANCE");
   });
-  it("reports reverted tx and keeps the claim (no auto-retry)", async () => {
+  it("reports a reverted tx; the receipt proves nothing settled so a NEW request may resubmit", async () => {
     const { relayer, store } = setup({ waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: "reverted" }) });
     expect(await code(relayer.submit(req))).toBe("TX_REVERTED");
+    expect((await store.getClaim(req.order.orderId))?.status).toBe("reverted");
+    expect(await store.claimOrder(req.order.orderId, buyer)).toBe(true);
+  });
+  it("keeps the claim as `sent` on receipt timeout (outcome unknown, never auto-retried)", async () => {
+    const { relayer, store } = setup({ waitForTransactionReceipt: vi.fn().mockRejectedValue(new Error("timeout")) });
+    expect(await code(relayer.submit(req))).toBe("TX_TIMEOUT");
+    expect((await store.getClaim(req.order.orderId))?.status).toBe("sent");
     expect(await store.claimOrder(req.order.orderId, buyer)).toBe(false);
   });
   it("reports receipt timeout", async () => {

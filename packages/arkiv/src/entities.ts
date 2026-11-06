@@ -85,8 +85,9 @@ export async function listCampaigns(r: ArkivReader, f: CampaignFilter = {}, now 
   }));
 }
 
-export async function listOffers(r: ArkivReader, campaignId: bigint, limit = 50) {
-  const res = await r.select().from(OfferSchema).where(eq("campaignId", u64(campaignId))).limit(limit).fetch();
+export async function listOffers(r: ArkivReader, campaignId: bigint, limit = 50, offset = 0) {
+  // Sorted by key so offset pages are stable while others write.
+  const res = await r.select().from(OfferSchema).where(eq("campaignId", u64(campaignId))).orderBy(asc("$key")).limit(limit).offset(offset).fetch();
   return res.entities.map((e) => ({
     entityKey: e.$key, creator: e.$owner, campaignId: e.campaignId.value, channel: e.channel.value, audience: e.audience.value,
     askBps: Number(e.askBps.value), expectedReach: e.expectedReach.value,
@@ -137,12 +138,12 @@ export async function updateConversionStatus(w: ArkivWriter, entityKey: Hex, sta
  * Every live offer. Offers expire after 72h, so "all live offers" is by construction the last 72 hours of
  * creator interest — the signal behind trending campaigns. Pages by key so a concurrent write can't skip rows.
  */
-export async function listLiveOffers(r: ArkivReader, maxPages = 5) {
+export async function listLiveOffers(r: ArkivReader, maxPages = 5, pageSize = 100) {
   const out: { entityKey: Hex; creator: Address; campaignId: bigint; askBps: number }[] = [];
   for (let page = 0; page < maxPages; page++) {
-    const res = await r.select().from(OfferSchema).orderBy(asc("$key")).limit(100).offset(page * 100).fetch();
+    const res = await r.select().from(OfferSchema).orderBy(asc("$key")).limit(pageSize).offset(page * pageSize).fetch();
     for (const e of res.entities) out.push({ entityKey: e.$key, creator: e.$owner, campaignId: e.campaignId.value, askBps: Number(e.askBps.value) });
-    if (res.entities.length < 100) break;
+    if (res.entities.length < pageSize) break;
   }
   return out;
 }
