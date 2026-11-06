@@ -16,6 +16,11 @@ import { arkivConversionSink } from "./integrations/arkivSink.js";
 import { Indexer, MemoryCursor, noopSink } from "./services/indexer.js";
 import { ReleaseKeeper } from "./services/keeper.js";
 import { MemoryReleaseQueue } from "./services/releaseQueue.js";
+import Anthropic from "@anthropic-ai/sdk";
+import { AgentRunner } from "./agents/runner.js";
+import { ClaudeNotes, templateNotes } from "./agents/llm.js";
+import { MemoryPolicyStore, PgPolicyStore } from "./agents/store.js";
+import { registerAgentRoutes } from "./routes/agents.js";
 import { registerCors } from "./routes/cors.js";
 import { registerDiscoveryRoutes } from "./routes/discovery.js";
 import { registerClickRoutes, type ClickDeps } from "./routes/clicks.js";
@@ -161,6 +166,40 @@ export function buildServer(env: Env) {
       return { verifiedConversions: live.length, grossSettled: live.reduce((a, v) => a + v.gross, 0n), commissionEarned: live.reduce((a, v) => a + v.commission, 0n) };
     };
     registerDiscoveryRoutes(app, { arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address, ...(env.CAMPAIGN_REGISTRY_ADDRESS && { registry: env.CAMPAIGN_REGISTRY_ADDRESS }), cache: new Map(), timeoutMs: env.DISCOVERY_TIMEOUT_MS });
+  }
+
+  // Negotiation agents (docs/AGENTS.md): need the agent wallet, an Arkiv reader and a registry to verify merchants against.
+  if (env.AGENT_WALLET_PRIVATE_KEY && reader && env.CAMPAIGN_REGISTRY_ADDRESS) {
+    const agentAccount = privateKeyToAccount(env.AGENT_WALLET_PRIVATE_KEY as `0x${string}`);
+    const store = pool ? new PgPolicyStore(pool) : new MemoryPolicyStore();
+    registerAgentRoutes(app, { arkiv: reader, pub, registry: env.CAMPAIGN_REGISTRY_ADDRESS, store, agentAddress: agentAccount.address });
+    const notes = env.ANTHROPIC_API_KEY
+      ? new ClaudeNotes(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), env.AGENT_LLM_MODEL, (e) => app.log.warn(e, "agent note via Claude failed; used template"))
+      : templateNotes;
+    const registry = env.CAMPAIGN_REGISTRY_ADDRESS;
+    const merchants = new Map<string, `0x${string}` | null>();
+    const runner = new AgentRunner({
+      arkiv: reader, writer: createArkivWriter({ account: agentAccount, accessKey: env.ARKIV_ACCESS_KEY }), agentAddress: agentAccount.address, store, notes,
+      merchantOf: async (id) => {
+        const k = id.toString();
+        if (merchants.has(k)) return merchants.get(k)!;
+        try {
+          const c = await pub.readContract({ address: registry, abi: campaignRegistryAbi, functionName: "getCampaign", args: [id] });
+          if (!c.exists) return null;
+          merchants.set(k, c.merchant);
+          return c.merchant;
+        } catch { return null; }
+      },
+      log: (o) => app.log.info(o),
+    });
+    let busy = false, timer: ReturnType<typeof setInterval> | undefined;
+    app.addHook("onReady", async () => {
+      timer = setInterval(async () => {
+        if (busy) return; busy = true;
+        try { await runner.tick(); } catch (e) { app.log.error(e, "agent tick failed"); } finally { busy = false; }
+      }, env.AGENT_POLL_MS);
+    });
+    app.addHook("onClose", async () => { if (timer) clearInterval(timer); });
   }
 
   registerClickRoutes(app, {

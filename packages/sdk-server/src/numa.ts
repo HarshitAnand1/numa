@@ -1,6 +1,6 @@
 import { isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { whitechainSepolia } from "@numa/shared";
+import { relayRequest, whitechainSepolia, type RelayRequest } from "@numa/shared";
 import { OrderSigner } from "./signer.js";
 
 export interface NumaOptions {
@@ -28,7 +28,7 @@ export interface NumaOptions {
 
 /** JSON-safe order payload returned to the checkout (bigints as decimal strings). */
 export interface OrderPayload {
-  order: { campaignId: string; merchant: Address; creator: Address; buyer: Address; amount: string; orderId: Hex; deadline: string };
+  order: { campaignId: string; merchant: Address; creator: Address; buyer: Address; /** Gross payment in USDT base units (6 decimals), a decimal string. Same name and shape the relayer's /relay expects. */ gross: string; orderId: Hex; deadline: string };
   digest: Hex;
   /** The nonce the buyer must use when signing the EIP-3009 USDT authorization. */
   authNonce: Hex;
@@ -37,6 +37,17 @@ export interface OrderPayload {
   payoutSigner: Address;
   router: Address;
   chainId: number;
+}
+
+/** The buyer's EIP-3009 signature parts (what the checkout sends back after the buyer signs `authNonce`). */
+export interface BuyerAuth { validAfter: string; validBefore: string; v: 27 | 28; r: Hex; s: Hex }
+
+/**
+ * Builds the exact body for the relayer's `POST /relay` from a payload and the buyer's signature,
+ * validated against the shared schema so a field mismatch fails here rather than at the relayer.
+ */
+export function toRelayRequest(payload: OrderPayload, auth: BuyerAuth): RelayRequest {
+  return relayRequest.parse({ order: payload.order, merchantSig: payload.merchantSig, auth });
 }
 
 /**
@@ -79,7 +90,7 @@ export class Numa {
     return {
       order: {
         campaignId: o.order.campaignId.toString(), merchant: o.order.merchant, creator: o.order.creator,
-        buyer: o.order.buyer, amount: o.order.gross.toString(), orderId: o.order.orderId, deadline: o.order.deadline.toString(),
+        buyer: o.order.buyer, gross: o.order.gross.toString(), orderId: o.order.orderId, deadline: o.order.deadline.toString(),
       },
       digest: o.digest, authNonce: o.authNonce, merchantSig: o.merchantSig, payoutSigner: o.payoutSigner,
       router: this.opts.router, chainId: this.chainId,
