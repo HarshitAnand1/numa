@@ -37,6 +37,12 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default(""),
   /** Max ms for a discovery request before it returns 504 instead of hanging on Arkiv. */
   DISCOVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  /** Negotiation agent wallet (writes Arkiv entities only; needs tGLM). Agents are off without it. */
+  AGENT_WALLET_PRIVATE_KEY: key.optional(),
+  AGENT_POLL_MS: z.coerce.number().int().min(5000).default(15_000),
+  /** Optional: when set, Claude phrases agent notes. Decisions never depend on it. */
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AGENT_LLM_MODEL: z.string().default("claude-opus-5-5"),
   ORDER_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 });
 export type Env = z.infer<typeof schema>;
