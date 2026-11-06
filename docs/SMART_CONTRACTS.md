@@ -2,7 +2,10 @@
 
 Owner: Member 1 (`packages/contracts`, branch `feat/contracts`). Status: implemented and tested
 on a local Foundry chain (41/41 tests passing, including a 512-run fuzz invariant). **Not yet
-deployed to Whitechain Sepolia** — see "Deployment" below and `docs/PROJECT_STATUS.md`.
+deployed to Whitechain Sepolia** — see "Deployment" below and `docs/PROJECT_STATUS.md`. **Not yet
+integrated with the backend/relayer** — see `docs/PROJECT_STATUS.md` → "Interface reconciliation"
+for a list of concrete gaps between this implementation and the backend's pre-implementation
+proposal (`packages/shared/src/order.ts`, `abi.ts`).
 
 ## Contracts
 
@@ -19,6 +22,11 @@ Holds campaign terms and creator approvals. Holds no funds.
   approval/revocation are mutable, both merchant-only.
 - `approveCreator(campaignId, creator)` / `revokeCreator(campaignId, creator)`: merchant-only.
 - `pause(campaignId, paused)`: merchant-only; a paused campaign fails `isSettleable`.
+- `getCampaign(campaignId) -> Campaign` / `isCreatorApproved(campaignId, creator) -> bool` /
+  `isSettleable(campaignId) -> bool`: public views. **Note:** there is no `merchantOf(campaignId)`
+  function — the merchant address is a field on the `Campaign` struct returned by `getCampaign`
+  (`getCampaign(campaignId).merchant`). An earlier backend proposal assumed a `merchantOf`
+  function that was never implemented; see `docs/PROJECT_STATUS.md` → "Interface reconciliation."
 - `isSettleable(campaignId) -> bool`: `exists && !paused && block.timestamp <= endsAt`. NumaRouter
   checks this before every settlement.
 
@@ -50,6 +58,11 @@ EIP-3009 signature and the merchant's EIP-712 signature are what authorize the s
 `msg.sender`. Relayer-side allowlisting, rate limiting and spend caps are an operational concern
 for Member 2, not enforced on-chain.
 
+**Note on `authNonce`:** the caller must supply the EIP-3009 authorization nonce explicitly as a
+parameter — the contract does not derive or recompute it internally. An earlier backend proposal
+assumed a `payOrder` signature with no explicit `authNonce` parameter; see
+`docs/PROJECT_STATUS.md` → "Interface reconciliation."
+
 #### `refund(orderId, refundAmount)`
 
 Merchant-only, only before `release`. See the ADR for the full accounting — in short: the
@@ -64,15 +77,21 @@ commission to the creator, marks the order released. Reverts on a second call.
 
 ## Events (handoff to Member 2 / Member 3 per `TEAM.md`)
 
-- `OrderSettled(orderId, campaignId, merchant, creator, buyer, gross, merchantNet, commission, fee)`
-- `OrderRefunded(orderId, refundAmount, commissionClawback, merchantPulled)`
-- `CommissionReleased(orderId, creator, amount)`
+- `OrderSettled(orderId indexed, campaignId indexed, merchant indexed, creator, buyer, gross, merchantNet, commission, fee)`
+- `OrderRefunded(orderId indexed, refundAmount, commissionClawback, merchantPulled)`
+- `CommissionReleased(orderId indexed, creator indexed, amount)`
 - `CampaignCreated`, `CreatorApproved`, `CreatorRevoked`, `CampaignPaused` (CampaignRegistry)
+
+Indexed-parameter positions matter for any code decoding these events by topic position rather
+than by field name — an earlier backend ABI proposal indexed `creator` instead of `merchant` as
+the third `OrderSettled` topic; see `docs/PROJECT_STATUS.md` → "Interface reconciliation."
 
 ABIs are exported to `packages/shared/src/abis/` (`CampaignRegistry.json`, `NumaRouter.json`),
 regenerated from `packages/contracts/out/` after any contract change. TypeScript mirrors of the
-`Order` struct and EIP-712 typed-data definition live in `packages/shared/src/contracts-types.ts`.
-Deployed addresses go in `packages/shared/src/addresses.ts` once deployed (currently empty).
+`Order` struct and EIP-712 typed-data definition live in `packages/shared/src/contracts-types.ts`,
+re-exported from `@numa/shared` as `NumaRouterOrder` (see `docs/PROJECT_STATUS.md` for why it's
+renamed at the barrel export). Deployed addresses go in `packages/shared/src/addresses.ts` once
+deployed (currently empty).
 
 ## Security measures implemented
 
@@ -89,6 +108,39 @@ Deployed addresses go in `packages/shared/src/addresses.ts` once deployed (curre
 - All payout arithmetic is integer-only, rounds down, and is covered by a fuzz test
   (`testFuzz_payOrder_splitInvariant`, 512 runs) asserting `merchantNet + commission + fee ==
   gross` for arbitrary gross/commissionBps/feeBps within their valid ranges.
+
+## Invariants
+
+Proven by the test suite (see "Testing" below):
+- `merchantNet + commission + fee == gross` for any valid `gross`/`commissionBps`/`feeBps`
+  (`testFuzz_payOrder_splitInvariant`, 512 fuzz runs).
+- An order can only settle once (`test_payOrder_revertsOnReplay`) and only release once
+  (`test_release_revertsOnDoubleRelease`).
+- `heldCommission` after N refunds equals `commission` minus the sum of each refund's clawback,
+  and a refund of the full refundable base claws back exactly the full held commission and pulls
+  exactly `merchantNet` from the merchant, never more (`test_refund_maxRefundableClawsBackEntireCommission`).
+
+Structurally true but **not yet explicitly fuzzed across multiple concurrent orders**: the
+router's USDT balance should always be ≥ the sum of `heldCommission` across all unreleased orders
+(each order's accounting is independent and per-`orderId`-keyed, so this should hold by
+construction, but no test asserts it as a cross-order aggregate property). Worth adding if the
+contracts are revisited.
+
+## Trust assumptions
+
+- The campaign's `payoutSigner` is trusted to sign only legitimate orders on the merchant's
+  behalf — a malicious or compromised payout signer can authorize arbitrary settlements for that
+  campaign (bounded by the campaign's own `commissionBps` and the creator-approval/settleability
+  checks). Merchant collusion (e.g., a merchant self-purchasing through an approved creator to
+  manufacture fake conversions) is out of scope for the contracts — see `README.md` → Known
+  limitations.
+- The USDT token is assumed to behave as a standard, non-hook, non-rebasing ERC-20 with a correct
+  EIP-3009 implementation, as independently verified against Whitechain testnet USDT in
+  `docs/WHITECHAIN.md`. The token's own proxy admin could in principle change its implementation;
+  the router has no way to detect or defend against that.
+- The router holds no admin/owner role and has no withdrawal function outside the normal
+  `payOrder`/`refund`/`release` flows — there is no privileged party who can move held funds
+  other than through those three functions' normal accounting.
 
 ## Known limitations (see also `README.md` and `initial-prompt.md` §21)
 
