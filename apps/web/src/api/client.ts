@@ -1,7 +1,9 @@
 import type {
   ApiCampaign,
   ApiCreatorCard,
+  ApiInvite,
   ApiLeaderboardRow,
+  ApiRecommendation,
   ApiReputation,
   ApiTrending,
 } from "./types";
@@ -18,6 +20,8 @@ export class ApiError extends Error {
     message: string,
     readonly kind: "network" | "http" | "timeout" | "shape",
     readonly status?: number,
+    /** the API's own `error` string, when it sent one (e.g. "no profile published for this creator") */
+    readonly detail?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -56,7 +60,13 @@ export async function getJson<T>(
   } finally {
     clearTimeout(timer);
   }
-  if (!res.ok) throw new ApiError(`API ${res.status}`, "http", res.status);
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((b: { error?: unknown }) => (typeof b?.error === "string" ? b.error : undefined))
+      .catch(() => undefined);
+    throw new ApiError(`API ${res.status}`, "http", res.status, detail);
+  }
   const type = res.headers.get("content-type") ?? "";
   if (!type.includes("json")) {
     // A dev server or CDN answering with index.html means the API is not there.
@@ -86,6 +96,10 @@ export const api = {
     getJson<ApiLeaderboardRow[]>(`/discovery/leaderboard${qs({ ...q })}`, { signal }),
   creator: (address: string, signal?: AbortSignal) =>
     getJson<ApiCreatorCard>(`/creators/${address}`, { signal }),
+  recommendations: (address: string, signal?: AbortSignal) =>
+    getJson<ApiRecommendation[]>(`/creators/${address}/recommendations`, { signal }),
+  invites: (address: string, signal?: AbortSignal) =>
+    getJson<ApiInvite[]>(`/creators/${address}/invites`, { signal }),
   reputation: (address: string, signal?: AbortSignal) =>
     getJson<ApiReputation & { rejected: unknown[] }>(`/creators/${address}/reputation`, { signal }),
 };

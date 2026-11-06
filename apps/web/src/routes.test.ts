@@ -43,6 +43,9 @@ describe("parseRoute", () => {
   it("treats pay/receipt links as the checkout", () => {
     expect(parseRoute("/pay/RIO-08-X").view).toBe("checkout");
     expect(parseRoute("/receipt/0xabc").view).toBe("checkout");
+    // the click tracker redirects to /checkout/<code>
+    expect(parseRoute("/checkout/RIO-08-X").view).toBe("checkout");
+    expect(parseRoute("/checkout").view).toBe("notFound");
     expect(parseRoute("/pay").view).toBe("notFound");
   });
 

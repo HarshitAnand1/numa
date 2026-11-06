@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, useConnect, useSwitchChain } from "wagmi";
 import { api, ApiError } from "./api/client";
-import { addressUrl, ago, formatUsdt, shortAddress, txUrl } from "./api/format";
-import { DEMO_CREATOR, demoCampaigns, demoCreatorCard, demoLeaderboard, demoTrending } from "./api/mock";
+import { addressUrl, ago, bpsToPercent, formatUsdt, salesToCsv, shortAddress, txUrl } from "./api/format";
+import { DEMO_CREATOR, demoCampaigns, demoCreatorCard, demoInvites, demoLeaderboard, demoRecommendations, demoTrending } from "./api/mock";
 import { DataBadge, useResource } from "./api/useResource";
 import { toCampaignView, type CampaignView } from "./api/view";
+import type { ApiCampaign, ApiRecommendation } from "./api/types";
+import { parseCheckoutParams, useCheckout, type CheckoutParams } from "@numa/sdk-react";
+import { CHAIN_ID, CONTRACTS_READY, NUMA_CONFIG } from "./web3/config";
+import { WalletButton } from "./web3/WalletButton";
 import { parseRoute, routeToPath, titleFor, type Route, type View } from "./routes";
 
 /**
@@ -549,9 +554,7 @@ function Header({ view, setView }: { view: View; setView: (v: View) => void }) {
           <span className="network-pill">
             <i /> whitechain · 1874
           </span>
-          <button className="wallet-button">
-            <Icon name="wallet" /> <span>0x71…d03</span>
-          </button>
+          <WalletButton />
           <button
             className="menu-button"
             onClick={() => setMenu(!menu)}
@@ -1410,7 +1413,183 @@ function Creator({ address }: { address?: string }) {
   );
 }
 
+/**
+ * /checkout/:code?campaign=7&creator=0x…&amount=25.00
+ * Real, gasless checkout runs only when the contracts are configured AND the link carries a
+ * valid campaign, creator and amount. Otherwise the screen is a clearly labelled simulation:
+ * it never pretends a payment happened.
+ */
 function Checkout() {
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const parsed = useMemo(() => parseCheckoutParams(search), [search]);
+  if (CONTRACTS_READY && parsed.ok) return <LiveCheckout params={parsed.params} />;
+  return (
+    <SimulatedCheckout
+      reason={!CONTRACTS_READY ? "the contracts aren’t deployed yet" : parsed.ok ? "" : parsed.reason}
+    />
+  );
+}
+
+function LiveCheckout({ params }: { params: CheckoutParams }) {
+  const { address, chainId, isConnected } = useAccount();
+  const { connect, connectors, isPending: connecting } = useConnect();
+  const { switchChain, isPending: switching } = useSwitchChain();
+  const { state, pay, reset, busy } = useCheckout(params, NUMA_CONFIG);
+  const camps = useResource(
+    (s) => api.campaigns({ limit: 100 }, s),
+    () => [] as ApiCampaign[],
+    [],
+  );
+  const campaign = (camps.data ?? []).find((c) => c.campaignId === params.campaignId);
+  const ready = isConnected && chainId === CHAIN_ID;
+  const { step, verified, failure, result } = state;
+  // 0 connect, 1 sign, 2 relaying, 3 settled
+  const stage = step === "settled" ? 3 : step === "relaying" ? 2 : ready ? 1 : 0;
+  const noWallet = typeof window !== "undefined" && !("ethereum" in window);
+  const label: Record<string, string> = {
+    ordering: "PREPARING ORDER…",
+    verifying: "CHECKING THE ORDER ON-CHAIN…",
+    signing: "CONFIRM IN YOUR WALLET…",
+    relaying: "SENDING TO WHITECHAIN…",
+  };
+  return (
+    <main className="page checkout-page">
+      <div className="checkout-brand">
+        <Logo />
+        <span>SECURE TESTNET CHECKOUT</span>
+      </div>
+      <section className="checkout-wrap">
+        <div className="product">
+          <div className="product-art">
+            <span>
+              CAMPAIGN
+              <br />#{params.campaignId}
+            </span>
+            <b>{params.campaignId.slice(-2).padStart(2, "0")}</b>
+          </div>
+          <span>ORDER / CAMPAIGN #{params.campaignId}</span>
+          <h1>{campaign?.name || `CAMPAIGN #${params.campaignId}`}</h1>
+          <p>sold through creator {shortAddress(params.creator)}</p>
+          <strong>
+            {params.amount} <small>USDT</small>
+          </strong>
+        </div>
+        <div className="checkout-card">
+          {step !== "settled" ? (
+            <>
+              <div className="checkout-head">
+                <span>PAY WITH USDT</span>
+                <b>{params.amount}</b>
+              </div>
+              <div className="attribution">
+                <span>CREATOR ATTRIBUTION</span>
+                <strong>{shortAddress(params.creator)}</strong>
+                <i>{campaign ? `${bpsToPercent(campaign.commissionBps)} commission` : "commission set on-chain"} · held until the refund window ends</i>
+              </div>
+              <div className="pay-steps">
+                {["connect", "sign", "relaying", "settled"].map((s, i) => (
+                  <span className={i <= stage ? "on" : ""} key={s}>
+                    <i>{i < stage ? "✓" : i + 1}</i>
+                    {s}
+                  </span>
+                ))}
+              </div>
+              {(step === "signing" || step === "relaying") && verified && (
+                <div className="signature-note">
+                  <b>one signature. not a transaction.</b>
+                  <p>
+                    Authorize exactly {formatUsdt(verified.order.gross)} USDT to the numa router. The relayer pays the
+                    gas. Your wallet needs 0 WBT.
+                  </p>
+                  <div className="live-split">
+                    <span>merchant gets <b>{formatUsdt(verified.split.merchantNet)}</b></span>
+                    <span>creator held <b>{formatUsdt(verified.split.commission)}</b></span>
+                    <span>protocol fee <b>{formatUsdt(verified.split.fee)}</b></span>
+                  </div>
+                </div>
+              )}
+              {step === "relaying" && (
+                <div className="relaying">
+                  <i />
+                  <b>sending to whitechain</b>
+                  <span>do not close this window</span>
+                </div>
+              )}
+              {step === "failed" && failure && (
+                <div className="error-box" role="alert">
+                  <b>{failure.title}</b>
+                  <p>{failure.message}</p>
+                  <small className={`money-${failure.moneyMoved}`}>
+                    {failure.moneyMoved === "no" ? "NO MONEY MOVED" : "CHECK THE EXPLORER BEFORE RETRYING"} · {failure.code}
+                  </small>
+                </div>
+              )}
+              {!isConnected ? (
+                <button
+                  className="pay-button"
+                  disabled={connecting}
+                  onClick={() => !noWallet && connect({ connector: connectors[0], chainId: CHAIN_ID })}
+                >
+                  {connecting ? "CONNECTING…" : noWallet ? "NO WALLET FOUND IN THIS BROWSER" : "CONNECT WALLET"} <Icon name="arrow" />
+                </button>
+              ) : !ready ? (
+                <button className="pay-button" disabled={switching} onClick={() => switchChain({ chainId: CHAIN_ID })}>
+                  {switching ? "SWITCHING…" : "SWITCH TO WHITECHAIN"} <Icon name="arrow" />
+                </button>
+              ) : step === "failed" && failure && !failure.retry ? (
+                <button className="pay-button" onClick={reset}>
+                  START OVER <Icon name="arrow" />
+                </button>
+              ) : (
+                <button className="pay-button" disabled={busy} onClick={pay}>
+                  {busy ? label[step] : step === "failed" ? "TRY AGAIN" : `PAY ${params.amount} USDT`} <Icon name="arrow" />
+                </button>
+              )}
+              <p className="checkout-fine">
+                {address ? `paying from ${shortAddress(address)} · ` : ""}testnet funds only · no gas prompt
+              </p>
+            </>
+          ) : (
+            verified && result && (
+              <div className="receipt">
+                <div className="receipt-notch" />
+                <Logo />
+                <span>ORDER / {shortAddress(verified.order.orderId, 6, 4)}</span>
+                <h2>
+                  {formatUsdt(verified.order.gross)} <small>USDT</small>
+                </h2>
+                <Stamp tone="green">SETTLED</Stamp>
+                <div className="receipt-lines">
+                  <p>
+                    <span>merchant / paid</span>
+                    <b>{formatUsdt(verified.split.merchantNet)}</b>
+                  </p>
+                  <p>
+                    <span>creator / held</span>
+                    <b>{formatUsdt(verified.split.commission)}</b>
+                  </p>
+                  <p>
+                    <span>protocol fee</span>
+                    <b>{formatUsdt(verified.split.fee)}</b>
+                  </p>
+                </div>
+                <div className="chain-check">
+                  <Icon name="check" /> confirmed by the relayer · block {Number(result.blockNumber).toLocaleString("en-US")}
+                </div>
+                <button onClick={() => window.open(txUrl(result.txHash), "_blank", "noopener")}>
+                  {shortAddress(result.txHash, 6, 4)} <Icon name="external" />
+                </button>
+                <p>the creator’s commission is held until the refund window ends.</p>
+              </div>
+            )
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function SimulatedCheckout({ reason }: { reason: string }) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
   const advance = () => {
@@ -1425,7 +1604,7 @@ function Checkout() {
     <main className="page checkout-page">
       <div className="checkout-brand">
         <Logo />
-        <span>SECURE TESTNET CHECKOUT</span>
+        <span>SIMULATED CHECKOUT</span>
       </div>
       <section className="checkout-wrap">
         <div className="product">
@@ -1449,6 +1628,13 @@ function Checkout() {
           </strong>
         </div>
         <div className="checkout-card">
+          <div className="sim-banner" role="status">
+            <b>SIMULATION</b>
+            <span>
+              No wallet, no money, nothing sent{reason ? `: ${reason}` : ""}. Real payments need a link with
+              campaign, creator and amount, and deployed contracts.
+            </span>
+          </div>
           {step < 3 ? (
             <>
               <div className="checkout-head">
@@ -1478,16 +1664,16 @@ function Checkout() {
                 <div className="signature-note">
                   <b>one signature. not a transaction.</b>
                   <p>
-                    Authorize exactly 125.00 USDT to the numa router. The relayer pays the gas. Your
-                    wallet needs 0 WBT.
+                    In a real payment you authorize exactly the order amount to the numa router; the relayer pays
+                    the gas and your wallet needs 0 WBT.
                   </p>
                 </div>
               )}
               {step === 2 && (
                 <div className="relaying">
                   <i />
-                  <b>sending to whitechain</b>
-                  <span>do not close this window</span>
+                  <b>pretending to send</b>
+                  <span>nothing is being sent</span>
                 </div>
               )}
               {error && (
@@ -1498,7 +1684,7 @@ function Checkout() {
               )}
               {step < 2 && (
                 <button className="pay-button" onClick={advance}>
-                  {step === 0 ? "CONNECT WALLET" : "AUTHORIZE 125.00 USDT"} <Icon name="arrow" />
+                  {step === 0 ? "START SIMULATION" : "SIMULATE SIGNING"} <Icon name="arrow" />
                 </button>
               )}
               {step === 1 && (
@@ -1506,19 +1692,17 @@ function Checkout() {
                   simulate an error
                 </button>
               )}
-              <p className="checkout-fine">
-                testnet funds only · no gas prompt · chain-confirmed state
-              </p>
+              <p className="checkout-fine">simulation · nothing here touches a wallet or the chain</p>
             </>
           ) : (
             <div className="receipt">
               <div className="receipt-notch" />
               <Logo />
-              <span>ORDER / NMA-8821</span>
+              <span>SIMULATED ORDER</span>
               <h2>
                 125.00 <small>USDT</small>
               </h2>
-              <Stamp tone="green">SETTLED</Stamp>
+              <Stamp>SIMULATED</Stamp>
               <div className="receipt-lines">
                 <p>
                   <span>merchant / paid</span>
@@ -1534,12 +1718,9 @@ function Checkout() {
                 </p>
               </div>
               <div className="chain-check">
-                <Icon name="check" /> chain-confirmed · block 18,491,202
+                <Icon name="close" size={16} /> not on-chain · nothing was sent
               </div>
-              <button>
-                0xa91f…20c8 <Icon name="external" />
-              </button>
-              <p>creator commission releases in 6d 23h 59m</p>
+              <p>this was a simulation. no commission is being held.</p>
             </div>
           )}
         </div>
@@ -2102,10 +2283,16 @@ function AppSidebar({
   role,
   active,
   setActive,
+  title,
+  counts,
 }: {
   role: "creator" | "merchant";
   active: string;
   setActive: (value: string) => void;
+  /** name shown under the role; defaults to the sample merchant */
+  title?: string;
+  /** real badge counts per item; without it the (mock) merchant badge stays */
+  counts?: Record<string, number>;
 }) {
   const creatorItems = [
     "overview",
@@ -2130,7 +2317,7 @@ function AppSidebar({
     <aside className="app-sidebar">
       <div>
         <span>{role.toUpperCase()} APP</span>
-        <b>{role === "creator" ? "rio.santos" : "NULL OBJECTS"}</b>
+        <b>{title ?? (role === "creator" ? "rio.santos" : "NULL OBJECTS")}</b>
       </div>
       <nav>
         {items.map((item, i) => (
@@ -2141,7 +2328,7 @@ function AppSidebar({
           >
             <small>0{i + 1}</small>
             {item}
-            {item === "offers" && <i>{role === "merchant" ? 6 : 3}</i>}
+            {counts ? (counts[item] ?? 0) > 0 && <i>{counts[item]}</i> : item === "offers" && <i>{role === "merchant" ? 6 : 3}</i>}
           </button>
         ))}
       </nav>
@@ -2157,12 +2344,193 @@ function AppSidebar({
   );
 }
 
+function SampleBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="sim-banner" role="note">
+      <b>SAMPLE DATA</b>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+const inviteBadge = (v: boolean | null) => (v === true ? "verified" : v === false ? "unverified" : "unchecked");
+
+/**
+ * Creator app. Identity is the connected wallet: sales, matches and invites are read from the API
+ * by that address, nothing is stored about the visitor. Without a wallet the visitor can explore a
+ * clearly labelled sample dashboard instead.
+ */
 function CreatorApp() {
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const [sample, setSample] = useState(false);
   const [tab, setTab] = useState("overview");
+  const noWallet = typeof window !== "undefined" && !("ethereum" in window);
+  const addr = sample ? DEMO_CREATOR : isConnected ? address : undefined;
+
+  if (!addr) {
+    return (
+      <main className="product-app">
+        <AppSidebar role="creator" active={tab} setActive={setTab} title="not connected" counts={{}} />
+        <section className="app-panel gate-panel">
+          <div className="app-greeting">
+            <span>CREATOR APP / WALLET REQUIRED</span>
+            <h1>
+              WHO’S
+              <br />
+              <em>ASKING?</em>
+            </h1>
+          </div>
+          <p>
+            Your dashboard belongs to your wallet. Sales, invites and matches are read from Whitechain and
+            Arkiv by your address. Nothing about you is stored.
+          </p>
+          <div className="gate-actions">
+            <button
+              className="hard-button"
+              disabled={isPending}
+              onClick={() => !noWallet && connect({ connector: connectors[0], chainId: CHAIN_ID })}
+            >
+              {isPending ? "CONNECTING…" : noWallet ? "NO WALLET FOUND IN THIS BROWSER" : "CONNECT WALLET"}{" "}
+              <Icon name="arrow" />
+            </button>
+            <button className="outline-button" onClick={() => setSample(true)}>
+              EXPLORE WITH SAMPLE DATA
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+  return (
+    <CreatorDashboard
+      key={addr}
+      address={addr}
+      sample={sample}
+      tab={tab}
+      setTab={setTab}
+      leaveSample={() => setSample(false)}
+    />
+  );
+}
+
+const sampleOnly = () => Promise.reject(new ApiError("sample dashboard", "shape"));
+
+function CreatorDashboard({
+  address,
+  sample,
+  tab,
+  setTab,
+  leaveSample,
+}: {
+  address: string;
+  sample: boolean;
+  tab: string;
+  setTab: (t: string) => void;
+  leaveSample: () => void;
+}) {
   const [copied, setCopied] = useState("");
+  const card = useResource(
+    (s) => (sample ? sampleOnly() : api.creator(address, s)),
+    () => demoCreatorCard(address),
+    [address, sample],
+  );
+  // A creator with no profile gets 404 "no profile..." from this endpoint: that is an answer, not an outage.
+  const recs = useResource<ApiRecommendation[] | null>(
+    async (s) => {
+      if (sample) return sampleOnly();
+      try {
+        return await api.recommendations(address, s);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404 && /no profile/i.test(e.detail ?? "")) return null;
+        throw e;
+      }
+    },
+    () => demoRecommendations(),
+    [address, sample],
+  );
+  const inv = useResource(
+    (s) => (sample ? sampleOnly() : api.invites(address, s)),
+    () => demoInvites(),
+    [address, sample],
+  );
+  const camps = useResource(
+    (s) => (sample ? sampleOnly() : api.campaigns({ limit: 100 }, s)),
+    () => demoCampaigns(),
+    [sample],
+  );
+
+  const c = card.data;
+  const rep = c?.reputation;
+  const profile = c?.profile ?? null;
+  const sales = c?.recentSales ?? [];
+  const invites = inv.data ?? [];
+  const nameOf = (id: string) => (camps.data ?? []).find((x) => x.campaignId === id)?.name || `Campaign #${id}`;
+  const sumCommission = (status: string) =>
+    sales.filter((x) => x.status === status).reduce((a, x) => a + BigInt(x.commission), 0n);
+  const held = sumCommission("held");
+  const released = sumCommission("released");
+  const earned = rep ? BigInt(rep.commissionEarned) : 0n;
+  const title = profile?.displayName || shortAddress(address);
+  const badge = (
+    <>
+      <DataBadge status={card.status} reason={card.reason} />
+      {sample && (
+        <button className="link-button" onClick={leaveSample}>
+          leave sample
+        </button>
+      )}
+    </>
+  );
+  const open = (campaignId: string) =>
+    window.dispatchEvent(new CustomEvent("nav", { detail: { view: "campaignDetail", campaignId } }));
+  const downloadCsv = () => {
+    const url = URL.createObjectURL(new Blob([salesToCsv(sales)], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `numa-sales-${shortAddress(address, 6, 4)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const recRows = (recs.data ?? []).map((r) => ({ view: toCampaignView(r.campaign), tag: r.primaryMatch ? "BEST MATCH" : "MATCH" }));
+  const recIds = new Set(recRows.map((r) => r.view.campaignId));
+  const otherRows = (camps.data ?? [])
+    .filter((x) => !recIds.has(x.campaignId))
+    .map((x) => ({ view: toCampaignView(x), tag: "" }));
+
+  const campaignRow = (r: { view: CampaignView; tag: string }, i: number) => (
+    <div className="creator-campaign-row" key={r.view.campaignId}>
+      <span>0{i + 1}</span>
+      <div>
+        <small>
+          {r.view.category} / {r.view.region}
+          {r.tag && <> · <b className="match-tag">{r.tag}</b></>}
+        </small>
+        <h3>{r.view.name}</h3>
+        <VerificationBadge state={r.view.verified} />
+      </div>
+      <div>
+        <small>COMMISSION</small>
+        <b>{r.view.commissionLabel}</b>
+      </div>
+      <div>
+        <small>ENDS IN</small>
+        <b>{r.view.ends}</b>
+      </div>
+      <button onClick={() => open(r.view.campaignId)}>
+        OFFER <Icon name="arrow" />
+      </button>
+    </div>
+  );
+
   const content =
     tab === "profile" ? (
       <section className="app-panel profile-panel">
+        <SampleBanner>
+          Publishing a profile needs a wallet signature and tGLM on Arkiv, which isn’t built yet. This is a preview of the form.
+          {profile ? " Your published profile is shown on your public card." : ""}
+        </SampleBanner>
         <div className="panel-title"><div><span>PROFILE / WALLET-OWNED</span><h2>say enough.<br />not everything.</h2></div><span className="status live">● PUBLISHED</span></div>
         <div className="profile-layout">
           <div className="profile-form">
@@ -2176,23 +2544,122 @@ function CreatorApp() {
           </div>
           <aside className="profile-preview"><span>PUBLIC PREVIEW</span><div><Stamp tone="green">OPEN</Stamp><strong>87</strong><h3>RIO<br/>SANTOS</h3><p>streetwear / running / photography</p><code>0x71c9…d03a</code></div><p>Share image exports at 1200 × 630 with the same score and chain-confirmed label.</p></aside>
         </div>
+      
       </section>
     ) : tab === "invites" ? (
       <section className="app-panel invites-panel">
-        <div className="panel-title"><div><span>INVITES / ARKIV</span><h2>they asked.<br />you decide.</h2></div><span className="wizard-count">02</span></div>
-        {[
-          ["NULL OBJECTS","verified","NO SLEEP / DROP 08","18%","31h 08m","active"],
-          ["NEON PRESS","unchecked","READ BANNED BOOKS","24%","47h 12m","active"],
-          ["ARCHIVE FM","verified","VINYL IS NOT DEAD","20%","expired","expired"],
-        ].map(invite=><article className={`invite-row ${invite[5]}`} key={invite[0]}><div><VerificationBadge state={invite[1]}/><h3>{invite[0]}</h3><p>{invite[2]}</p></div><div><span>COMMISSION</span><b>{invite[3]}</b></div><div><span>EXPIRES</span><b>{invite[4]}</b></div><div>{invite[5]==="expired"?<span className="status ended">EXPIRED</span>:<><button>DECLINE</button><button>ACCEPT</button></>}</div></article>)}
+        <div className="panel-title">
+          <div>
+            <span>INVITES / ARKIV · {badge}</span>
+            <h2>
+              they asked.
+              <br />
+              you decide.
+            </h2>
+          </div>
+          <span className="wizard-count">{String(invites.length).padStart(2, "0")}</span>
+        </div>
+        {invites.map((inv2) => (
+          <article className="invite-row active" key={inv2.entityKey}>
+            <div>
+              <VerificationBadge state={inviteBadge(inv2.verified)} />
+              <h3>{nameOf(inv2.campaignId)}</h3>
+              <p>{inv2.message || `from ${shortAddress(inv2.merchant)}`}</p>
+            </div>
+            <div>
+              <span>OFFERED</span>
+              <b>{bpsToPercent(inv2.offeredBps)}</b>
+            </div>
+            <div>
+              <span>FROM</span>
+              <b>{shortAddress(inv2.merchant, 6, 4)}</b>
+            </div>
+            <div>
+              <button onClick={() => open(inv2.campaignId)}>VIEW CAMPAIGN</button>
+            </div>
+          </article>
+        ))}
+        {inv.status !== "loading" && !invites.length && (
+          <div className="empty small">
+            <h3>no invites yet.</h3>
+            <p>Merchants find you through your profile. Publish one and keep “open for work” on.</p>
+          </div>
+        )}
+        {invites.length > 0 && (
+          <p className="panel-note">
+            Accepting an invite means publishing an offer on that campaign. Publishing needs wallet signing on Arkiv, which isn’t built yet. A “not verified” badge means the inviter isn’t the campaign’s on-chain owner.
+          </p>
+        )}
       </section>
-    ) : tab === "discover" || tab === "offers" ? (
+    ) : tab === "discover" ? (
       <section className="app-panel creator-discover">
-        <div className="panel-title"><div><span>{tab === "offers" ? "YOUR OFFERS / 03" : "DISCOVER / TRENDING"}</span><h2>{tab === "offers" ? <>waiting is part<br/>of the pitch.</> : <>pick something<br/>you’d actually use.</>}</h2></div><button className="outline-button">FILTER</button></div>
-        {campaigns.map((c,i)=><div className="creator-campaign-row" key={c.id}><span>0{i+1}</span><div><small>{c.category} / {c.region}</small><h3>{c.name}</h3><VerificationBadge state={c.verified}/></div><div><small>{tab==="offers"?"YOUR ASK":"COMMISSION"}</small><b>{tab==="offers"?Math.max(10,c.commission-2):c.commission}%</b></div><div><small>{tab==="offers"?"EXPIRES":"ENDS IN"}</small><b>{tab==="offers"?["18h","2d 3h","2d 11h","expired"][i]:c.ends}</b></div><button onClick={()=>window.dispatchEvent(new CustomEvent("nav",{detail:{view:"campaignDetail",campaignId:c.campaignId}}))}>{tab==="offers"?"VIEW":"OFFER"} <Icon name="arrow"/></button></div>)}
+        <div className="panel-title">
+          <div>
+            <span>DISCOVER / {recs.data === null ? "ALL ACTIVE" : "MATCHED TO YOUR PROFILE"} · <DataBadge status={recs.status} reason={recs.reason} /></span>
+            <h2>
+              pick something
+              <br />
+              you’d actually use.
+            </h2>
+          </div>
+        </div>
+        {recs.data === null && (
+          <p className="panel-note">No profile published for this wallet, so there’s nothing to match against. Showing every active campaign.</p>
+        )}
+        {recRows.length > 0 && <h3 className="list-title">matched for you</h3>}
+        {recRows.map(campaignRow)}
+        {recRows.length > 0 && otherRows.length > 0 && <h3 className="list-title">everything else</h3>}
+        {otherRows.map((r, i) => campaignRow(r, recRows.length + i))}
+        {camps.status !== "loading" && !recRows.length && !otherRows.length && (
+          <div className="empty small">
+            <h3>no active campaigns.</h3>
+            <p>Merchants publish campaigns to Arkiv. When one does, it shows up here.</p>
+          </div>
+        )}
+      </section>
+    ) : tab === "offers" ? (
+      <section className="app-panel creator-discover">
+        <SampleBanner>
+          The API can’t list a creator’s own offers yet, and publishing one needs wallet signing on Arkiv. These rows are samples.
+        </SampleBanner>
+        <div className="panel-title">
+          <div>
+            <span>YOUR OFFERS / SAMPLE</span>
+            <h2>
+              waiting is part
+              <br />
+              of the pitch.
+            </h2>
+          </div>
+        </div>
+        {campaigns.map((x, i) => (
+          <div className="creator-campaign-row" key={x.id}>
+            <span>0{i + 1}</span>
+            <div>
+              <small>
+                {x.category} / {x.region}
+              </small>
+              <h3>{x.name}</h3>
+            </div>
+            <div>
+              <small>YOUR ASK</small>
+              <b>{Math.max(10, x.commission - 2)}%</b>
+            </div>
+            <div>
+              <small>EXPIRES</small>
+              <b>{["18h", "2d 3h", "2d 11h", "expired"][i]}</b>
+            </div>
+            <button onClick={() => open(x.campaignId)}>
+              VIEW <Icon name="arrow" />
+            </button>
+          </div>
+        ))}
       </section>
     ) : tab === "links" ? (
       <section className="app-panel links-panel">
+        <SampleBanner>
+          Click and earnings numbers below are samples. Creating a link needs wallet signing on Arkiv, which isn’t built yet. Real link stats will come from the API’s link-stats endpoint.
+        </SampleBanner>
         <div className="panel-title">
           <div>
             <span>ATTRIBUTION</span>
@@ -2265,150 +2732,189 @@ function CreatorApp() {
           </div>
           <button>DOWNLOAD SVG</button>
         </div>
+      
       </section>
     ) : tab === "earnings" ? (
       <section className="app-panel earnings-panel">
         <div className="panel-title">
           <div>
-            <span>WHITECHAIN / LIVE</span>
+            <span>WHITECHAIN / VERIFIED · {badge}</span>
             <h2>
               money, without
               <br />
               the motivational quote.
             </h2>
           </div>
-          <button className="outline-button">EXPORT CSV</button>
+          <button className="outline-button" onClick={downloadCsv} disabled={!sales.length}>
+            EXPORT CSV
+          </button>
         </div>
         <div className="earnings-stats">
           <div>
-            <span>RELEASED</span>
-            <b>1,205.30</b>
-            <small>USDT</small>
+            <span>TOTAL EARNED</span>
+            <b>{formatUsdt(earned)}</b>
+            <small>USDT · every verified sale</small>
           </div>
           <div>
             <span>HELD</span>
-            <b>272.50</b>
-            <small>USDT</small>
+            <b>{formatUsdt(held)}</b>
+            <small>USDT · last {sales.length} sales</small>
           </div>
           <div>
-            <span>TOTAL EARNED</span>
-            <b>1,477.80</b>
-            <small>USDT</small>
+            <span>RELEASED</span>
+            <b>{formatUsdt(released)}</b>
+            <small>USDT · last {sales.length} sales</small>
           </div>
         </div>
-        <div className="chart">
-          <div className="chart-y">
-            <span>300</span>
-            <span>200</span>
-            <span>100</span>
-            <span>0</span>
-          </div>
-          <svg viewBox="0 0 700 220" preserveAspectRatio="none">
-            <path d="M0 190 L90 160 L180 175 L270 95 L360 125 L450 60 L540 80 L630 20 L700 48" />
-            <path
-              className="chart-held"
-              d="M0 210 L90 200 L180 190 L270 170 L360 160 L450 140 L540 130 L630 120 L700 105"
-            />
-          </svg>
-          <div className="chart-labels">
-            <span>APR 01</span>
-            <span>APR 08</span>
-            <span>APR 15</span>
-            <span>APR 22</span>
-            <span>NOW</span>
-          </div>
+        <div className="sales-bars">
+          <h3 className="list-title">recent verified sales</h3>
+          {(() => {
+            const max = sales.reduce((m, x) => (BigInt(x.gross) > m ? BigInt(x.gross) : m), 1n);
+            return sales.map((x) => (
+              <div className="sale-bar" key={x.txHash}>
+                <span>
+                  <b>{nameOf(x.campaignId)}</b>
+                  <small>
+                    {ago(x.paidAt)} · {x.status.replace("_", " ")}
+                  </small>
+                </span>
+                <i style={{ width: `${Math.max(4, Number((BigInt(x.gross) * 100n) / max))}%` }} className={`bar-${x.status}`} />
+                <strong>{formatUsdt(x.gross)} USDT</strong>
+                <button onClick={() => window.open(txUrl(x.txHash), "_blank", "noopener")} aria-label="View transaction">
+                  <Icon name="external" size={15} />
+                </button>
+              </div>
+            ));
+          })()}
+          {card.status !== "loading" && !sales.length && (
+            <div className="empty small">
+              <h3>no verified sales yet.</h3>
+              <p>Clicks don’t count. Only a settled USDT payment shows up here.</p>
+            </div>
+          )}
         </div>
         <div className="release-callout">
-          <span>NEXT RELEASE</span>
-          <b>42.50 USDT</b>
-          <strong>18h 09m 22s</strong>
-          <p>Order NMA-8821 · refund window ends automatically</p>
+          <span>WHEN IS COMMISSION RELEASED?</span>
+          <p>
+            After the router’s refund window ends, anyone can trigger the release and the held amount is paid to your wallet.
+            Exact release times will show here once the router is deployed and its window can be read.
+          </p>
         </div>
       </section>
     ) : (
       <section className="app-panel overview-panel">
         <div className="app-greeting">
-          <span>MONDAY / 09:41 UTC</span>
+          <span>
+            {badge} · {shortAddress(address)}
+          </span>
           <h1>
-            YOU MADE
-            <br />
-            <em>272.50</em> WHILE
-            <br />
-            NOT CLICKING.
+            {earned > 0n ? (
+              <>
+                YOU MADE
+                <br />
+                <em>{formatUsdt(earned)}</em> WHILE
+                <br />
+                NOT CLICKING.
+              </>
+            ) : (
+              <>
+                NOTHING SETTLED
+                <br />
+                <em>YET.</em>
+                <br />
+                CLICKS DON’T COUNT.
+              </>
+            )}
           </h1>
         </div>
         <div className="dashboard-stats">
           <div className="held">
             <span>HELD</span>
-            <b>272.50</b>
-            <small>USDT · 7 orders</small>
+            <b>{formatUsdt(held)}</b>
+            <small>USDT · last {sales.length} sales</small>
           </div>
           <div>
             <span>RELEASED</span>
-            <b>1,205.30</b>
-            <small>USDT · all time</small>
+            <b>{formatUsdt(released)}</b>
+            <small>USDT · last {sales.length} sales</small>
           </div>
           <div>
-            <span>NEXT RELEASE</span>
-            <b>18:09:22</b>
-            <small>42.50 USDT</small>
+            <span>VERIFIED SALES</span>
+            <b>{rep?.verifiedConversions ?? 0}</b>
+            <small>{rep?.score == null ? "no score yet" : `numa score ${rep.score}`}</small>
           </div>
         </div>
         <div className="dashboard-grid">
           <article>
             <div className="panel-head">
-              <h3>live offers</h3>
-              <button onClick={() => setTab("offers")}>view all →</button>
+              <h3>matched for you</h3>
+              <button onClick={() => setTab("discover")}>view all →</button>
             </div>
-            {["NO SLEEP / DROP 08", "VINYL IS NOT DEAD", "READ BANNED BOOKS"].map((x, i) => (
-              <div className="mini-row" key={x}>
+            {recRows.slice(0, 3).map((r) => (
+              <div className="mini-row" key={r.view.campaignId} onClick={() => open(r.view.campaignId)} role="button" tabIndex={0}>
                 <span>
-                  <b>{x}</b>
+                  <b>{r.view.name}</b>
                   <small>
-                    {[18, 24, 30][i]}% ask · expires {["18h", "2d", "2d 11h"][i]}
+                    up to {r.view.commissionLabel} · ends in {r.view.ends}
                   </small>
                 </span>
-                <span className={i === 0 ? "status live" : "status paused"}>
-                  {i === 0 ? "APPROVED" : "PENDING"}
-                </span>
+                <span className={r.tag === "BEST MATCH" ? "status live" : "status paused"}>{r.tag}</span>
               </div>
             ))}
+            {!recRows.length && (
+              <p className="panel-note">
+                {recs.status === "loading"
+                  ? "Looking for matches…"
+                  : recs.data === null
+                    ? "Publish a profile to get campaigns matched to your niche and minimum ask."
+                    : "No active campaign fits your profile right now."}
+              </p>
+            )}
           </article>
           <article>
             <div className="panel-head">
-              <h3>invites / 02</h3>
-              <button>see inbox →</button>
+              <h3>invites / {String(invites.length).padStart(2, "0")}</h3>
+              <button onClick={() => setTab("invites")}>see inbox →</button>
             </div>
-            <div className="invite-card">
-              <VerificationBadge state="verified" />
-              <h4>NULL OBJECTS wants you.</h4>
-              <p>NO SLEEP / DROP 08 · 18% · expires in 31h</p>
-              <div>
-                <button>DECLINE</button>
-                <button>ACCEPT</button>
+            {invites[0] ? (
+              <div className="invite-card">
+                <VerificationBadge state={inviteBadge(invites[0].verified)} />
+                <h4>{nameOf(invites[0].campaignId)}</h4>
+                <p>
+                  {bpsToPercent(invites[0].offeredBps)} offered · from {shortAddress(invites[0].merchant)}
+                </p>
+                <div>
+                  <button onClick={() => open(invites[0].campaignId)}>VIEW CAMPAIGN</button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="panel-note">No invites. Merchants find you through your profile.</p>
+            )}
           </article>
           <article className="checklist">
             <div className="panel-head">
               <h3>quick start</h3>
-              <span>3 / 4</span>
+              <span>{[!!profile, (rep?.verifiedConversions ?? 0) > 0].filter(Boolean).length} / 2 tracked</span>
             </div>
-            {["profile published", "first offer sent", "link created", "first sale settled"].map(
-              (x, i) => (
-                <p className={i < 3 ? "done" : ""} key={x}>
-                  <i>{i < 3 ? "✓" : "4"}</i>
-                  {x}
-                </p>
-              ),
-            )}
+            {[
+              { label: "profile published", done: !!profile },
+              { label: "first offer sent", done: null },
+              { label: "link created", done: null },
+              { label: "first sale settled", done: (rep?.verifiedConversions ?? 0) > 0 },
+            ].map((x, i) => (
+              <p className={x.done ? "done" : ""} key={x.label}>
+                <i>{x.done ? "✓" : x.done === null ? "?" : i + 1}</i>
+                {x.label}
+                {x.done === null && <small> · not tracked yet</small>}
+              </p>
+            ))}
           </article>
         </div>
       </section>
     );
   return (
     <main className="product-app">
-      <AppSidebar role="creator" active={tab} setActive={setTab} />
+      <AppSidebar role="creator" active={tab} setActive={setTab} title={title} counts={{ invites: invites.length }} />
       {content}
     </main>
   );
