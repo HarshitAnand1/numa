@@ -12,11 +12,14 @@ Source of truth: [`packages/arkiv/src/schemas.ts`](../packages/arkiv/src/schemas
 | `numa.profile` | creator wallet | niche, channel, minAskBps, open | displayName, bio, niches, handle | 90 days, renewable (`renewProfile`) |
 | `numa.invite` | merchant wallet | campaignId, creator | offeredBps, message | 48 hours |
 | `numa.endorsement` | merchant wallet | creator, campaignId, orderId, rating | txHash, note | 180 days |
+| `numa.agent` | principal wallet (creator or merchant) | agent, role | none | 30 days; delete to revoke |
+| `numa.negotiation` | agent wallet or the principal itself | offerKey, campaignId, creator, merchant, from, seq, action | bps, note | 72 hours |
 
 ## Trust rules (enforced in `apps/api`)
 - Campaign/invite is trusted only if the Arkiv owner equals `CampaignRegistry.getCampaign(id).merchant` on-chain. If the registry is unavailable the API reports `null` (unknown), never `true`.
 - A conversion is trusted only if it is owned by the configured writer wallet **and** matches an `OrderSettled` event for its `txHash`.
 - An endorsement counts only if its merchant owns it and the referenced order settled from that merchant.
+- A negotiation message counts only if its owner is the principal for `from`, or an agent wallet named by a live `numa.agent` entity owned by that principal (`ownedBy` filter). Accepts must name the other side's last rate; out-of-order or repeated-role messages are ignored (see `docs/AGENTS.md`).
 - Profiles are self-asserted; verified numbers come from conversions/endorsements, never from the profile.
 
 ## Wallets that wrote our entities (Rabdi)
