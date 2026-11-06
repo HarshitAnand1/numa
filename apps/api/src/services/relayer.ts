@@ -1,5 +1,5 @@
 import { recoverTypedDataAddress, type Address, type Hex, type PublicClient, type WalletClient, type Account } from "viem";
-import { USDT_ADDRESS, deriveAuthNonce, numaRouterAbi, orderDigest, orderTypedData, receiveAuthTypedData, type RelayRequest } from "@numa/shared";
+import { USDT_ADDRESS, campaignRegistryAbi, computeOrderCommitment, numaRouterAbi, orderTypedData, receiveAuthTypedData, type RelayRequest } from "@numa/shared";
 import type { RelayStore } from "./store.js";
 
 export type RelayErrorCode =
@@ -13,6 +13,9 @@ export class RelayError extends Error {
 
 export interface RelayerConfig {
   router: Address;
+  /** CampaignRegistry address - needed to independently fetch `commissionBps` for the
+   * OrderCommitment check (see docs/DECISIONS/0005-order-commitment-nonce-binding.md). */
+  registry: Address;
   chainId: number;
   maxGasPriceWei: bigint;
   dailyCapWei: bigint;
@@ -41,7 +44,8 @@ export class Relayer {
   private day() { return new Date(this.now() * 1000).toISOString().slice(0, 10); }
 
   async submit(req: RelayRequest, log: (o: object) => void = () => {}): Promise<RelayResult> {
-    const { order, auth, buyer } = req;
+    const { order, auth } = req;
+    const buyer = order.buyer;
     const now = BigInt(this.now());
 
     // Cheap, local validation first.
@@ -49,18 +53,30 @@ export class Relayer {
     if (auth.validAfter > now || auth.validBefore <= now) throw new RelayError("BAD_AUTH_WINDOW", "authorization not currently valid");
     const lower = buyer.toLowerCase();
     if (lower === order.creator.toLowerCase()) throw new RelayError("BAD_SELF_PURCHASE", "buyer cannot be creator");
+    if (lower === order.merchant.toLowerCase()) throw new RelayError("BAD_SELF_PURCHASE", "buyer cannot be merchant");
 
     // Merchant signature must at least be well-formed; the router enforces signer == campaign payout signer.
     try {
       await recoverTypedDataAddress({ ...orderTypedData(order, this.cfg.chainId, this.cfg.router), signature: req.merchantSig });
     } catch { throw new RelayError("BAD_MERCHANT_SIG", "unrecoverable merchant signature"); }
 
-    // The buyer's EIP-3009 authorization must be exactly for this order: recipient = router, value = amount,
-    // nonce derived from the order digest + creator (never taken from the request). A wrong nonce, amount,
+    // Independently fetch the campaign's commissionBps and the router's feeBps - the same values
+    // the contract itself reads at settlement time - to recompute the expected OrderCommitment
+    // locally. Never trust a caller-supplied authNonce; the relayer always derives it itself.
+    const [campaign, feeBps] = await Promise.all([
+      this.pub.readContract({ address: this.cfg.registry, abi: campaignRegistryAbi, functionName: "getCampaign", args: [order.campaignId] }),
+      this.pub.readContract({ address: this.cfg.router, abi: numaRouterAbi, functionName: "feeBps" }),
+    ]);
+    const nonce = computeOrderCommitment(
+      { campaignId: order.campaignId, merchant: order.merchant, creator: order.creator, buyer: order.buyer, gross: order.gross, commissionBps: campaign.commissionBps, feeBps, orderId: order.orderId, deadline: order.deadline },
+      this.cfg.chainId, this.cfg.router,
+    );
+
+    // The buyer's EIP-3009 authorization must be exactly for this order: recipient = router, value = gross,
+    // nonce = the OrderCommitment just recomputed (never taken from the request). A wrong nonce, amount,
     // recipient or signer recovers to a different address and is rejected before any RPC or gas is spent.
-    const nonce = deriveAuthNonce(orderDigest(order, this.cfg.chainId, this.cfg.router), order.creator);
     const authTyped = receiveAuthTypedData(
-      { from: buyer, router: this.cfg.router, value: order.amount, validAfter: auth.validAfter, validBefore: auth.validBefore, nonce },
+      { from: buyer, router: this.cfg.router, value: order.gross, validAfter: auth.validAfter, validBefore: auth.validBefore, nonce },
       this.cfg.chainId, this.cfg.token ?? USDT_ADDRESS,
     );
     let authSigner: Address | undefined;
@@ -77,7 +93,7 @@ export class Relayer {
       const gasPrice = await this.pub.getGasPrice();
       if (gasPrice > this.cfg.maxGasPriceWei) throw new RelayError("GAS_PRICE_TOO_HIGH", `gas price ${gasPrice} above ceiling`);
 
-      const args = [order, req.merchantSig, buyer, auth.validAfter, auth.validBefore, auth.v, auth.r, auth.s] as const;
+      const args = [order, req.merchantSig, auth.validAfter, auth.validBefore, nonce, auth.v, auth.r, auth.s] as const;
       let request;
       try {
         ({ request } = await this.pub.simulateContract({
@@ -116,5 +132,3 @@ export class Relayer {
     }
   }
 }
-
-export { deriveAuthNonce, orderDigest };

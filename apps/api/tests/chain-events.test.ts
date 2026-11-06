@@ -14,10 +14,10 @@ const txHash = `0x${"ee".repeat(32)}` as Hex;
 
 function settledLog(over: { gross?: bigint; creator?: `0x${string}`; address?: `0x${string}`; oid?: Hex; block?: bigint; idx?: number } = {}) {
   const abiItem = getAbiItem({ abi: numaRouterAbi, name: "OrderSettled" });
-  const topics = encodeEventTopics({ abi: [abiItem], eventName: "OrderSettled", args: { orderId: over.oid ?? orderId, campaignId: 7n, creator: over.creator ?? creator } });
+  const topics = encodeEventTopics({ abi: [abiItem], eventName: "OrderSettled", args: { orderId: over.oid ?? orderId, campaignId: 7n, merchant } });
   const data = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }],
-    [merchant, buyer, over.gross ?? 100_000_000n, 89_500_000n, 10_000_000n, 500_000n],
+    [over.creator ?? creator, buyer, over.gross ?? 100_000_000n, 89_500_000n, 10_000_000n, 500_000n],
   );
   return { address: over.address ?? router, topics, data, blockNumber: over.block ?? 10n, transactionHash: txHash, logIndex: over.idx ?? 0, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false };
 }
@@ -90,7 +90,7 @@ describe("Indexer", () => {
     const { sink, rows } = fakeSink();
     const refund = (amt: bigint, idx: number) => {
       const item = getAbiItem({ abi: numaRouterAbi, name: "OrderRefunded" });
-      return { address: router, topics: encodeEventTopics({ abi: [item], eventName: "OrderRefunded", args: { orderId } }), data: encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [amt, 5_000_000n]), blockNumber: 11n, transactionHash: txHash, logIndex: idx, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false };
+      return { address: router, topics: encodeEventTopics({ abi: [item], eventName: "OrderRefunded", args: { orderId } }), data: encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [amt, 5_000_000n, amt - 5_000_000n]), blockNumber: 11n, transactionHash: txHash, logIndex: idx, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false };
     };
     const ix = new Indexer(pub([refund(50_000_000n, 1), settledLog()]), router, sink, new MemoryCursor(0n), 2000n, 0n);
     await ix.tick(); // events given out of order; indexer sorts them
