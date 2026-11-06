@@ -3,10 +3,10 @@
 | Phase | Status |
 |---|---|
 | 0 Repo audit | Done (`REPOSITORY_AUDIT.md`) |
-| 1 Research | Partial: Whitechain/USDT EIP-3009 verified. Arkiv, refund funding model: TODO |
+| 1 Research | Partial: Whitechain/USDT EIP-3009 and Arkiv SDK researched (`docs/ARKIV.md`). Refund funding model: TODO |
 | 2 Foundation | Partial: monorepo skeleton, Foundry + OpenZeppelin, compose, env. No app scaffolds, CI, lint yet |
 | 3 Contracts | Not started |
-| 4 Arkiv + backend | Partial (branch `feat/backend-relayer`, uncommitted): shared protocol types, order signing service, relayer with guards, API server, 17 unit tests passing with mocked chain clients. Arkiv, indexer, reputation, Postgres: TODO |
+| 4 Arkiv + backend | Partial (branch `feat/backend-relayer`, uncommitted): shared protocol types, order signing service, relayer with guards, API server, 17 unit tests passing with mocked chain clients. `packages/arkiv` implemented against SDK 1.0.1 (schemas, publish/query, owner checks; offline tests only, no live write yet). Indexer, reputation, Postgres: TODO |
 | 5 Frontend | Not started |
 | 6 SDK + demo shop | Not started |
 | 7 E2E | Not started |
