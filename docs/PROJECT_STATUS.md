@@ -1,59 +1,61 @@
-# Project Status (single source of truth)
+# Project status (single source of truth)
+
+_Last reviewed: 2026-11-07. Everything marked "verified" was run; everything else is a claim about code, not about a live system._
+
+**Bottom line:** the contracts, relayer, indexer, keeper, Arkiv layer and discovery API are built and tested. **Nothing is deployed to Whitechain Sepolia, and a real gasless checkout has never been demonstrated.** The frontend's public screens read live API data; its checkout, dashboards and demo shop are still mock.
 
 | Phase | Status |
 |---|---|
-| 0 Repo audit | Done (`REPOSITORY_AUDIT.md`) |
-| 1 Research | Partial: Whitechain/USDT EIP-3009 verified, refund funding model resolved (`DECISIONS/0001-refund-funding-model.md`), Arkiv SDK researched (`docs/ARKIV.md`). |
-| 2 Foundation | Partial: monorepo skeleton, Foundry + OpenZeppelin, compose, env, `packages/shared` ABI/types export and typechecked/tested package tooling (viem, zod, vitest). No app scaffolds, CI, lint, or root tsconfig yet. |
-| 3 Contracts | **Done** (local): `CampaignRegistry.sol` + `NumaRouter.sol` implemented, 49/49 Foundry tests passing (unit + fuzz, incl. two 512-run invariants). Includes the `OrderCommitment` EIP-3009 nonce-binding fix from the mentor security review (`docs/DECISIONS/0005-order-commitment-nonce-binding.md`) — buyer authorizations are now cryptographically bound to the full order+split, closing an order/creator/campaign-substitution gap. **Not deployed to Whitechain Sepolia yet** — needs a human with a funded keystore (owner: Member 1). See `docs/SMART_CONTRACTS.md`. **Interface now reconciled with the backend (see "Interface reconciliation" below) and verified via unit/mocked tests — NOT yet exercised end-to-end against a live deployed router.** |
-| 4 Arkiv + backend | Partial (branch `feat/backend-relayer`): shared protocol types, order signing service, relayer with guards, API server. `packages/arkiv` implemented against SDK 1.0.1 (schemas, publish/query, owner checks, Rabdi-safe writer; `live:check` passed 7/7 against a real Rabdi testnet). Conversion verifier, reputation scoring, event indexer (Arkiv sink), `/creators/:addr/reputation` built and unit-tested against synthetic ABI-encoded logs. **Never run against a real router.** Postgres store (SQL migrations, relayer claims/spend/limits, indexer cursor) built and integration-tested against a real Postgres previously; order sessions table not built. **Interface reconciled as of this update** (Order shape, `authNonce`/`OrderCommitment`, `getCampaign` instead of `merchantOf`, `OrderSettled` indexing) — see "Interface reconciliation" below. `apps/api` 40/45 tests passing (5 Postgres-dependent tests skipped, no `TEST_DATABASE_URL` available this run); `packages/sdk-server` 5/5; `packages/shared` 1/1; `packages/arkiv` 25/25. |
+| 0 Repo audit | Done (`REPOSITORY_AUDIT.md`, a dated snapshot) |
+| 1 Research | Done: Whitechain USDT supports EIP-3009 (`WHITECHAIN.md`), refund model decided (ADR 0001), Arkiv SDK researched (`ARKIV.md`) |
+| 2 Foundation | Done: pnpm monorepo, Foundry + OpenZeppelin, Docker Compose, ESLint, GitHub Actions CI (typecheck, lint, tests with Postgres, forge build/test; passing on `main`), `.env.example` |
+| 3 Contracts | Built, **not deployed**. `CampaignRegistry` + `NumaRouter`, 55 Foundry tests (unit, fuzz, invariants), `OrderCommitment` nonce binding (ADR 0005), pre-deployment hardening (ADR 0006). A deploy script and checklist exist (`DEPLOYMENT_CHECKLIST.md`). Owner: Member 1 |
+| 4 Arkiv + backend | Built and tested; **never run against a deployed router**. Relayer with guards, reconciler, release keeper, indexer, click tracker, discovery + reputation API, negotiation agents (below), Dockerfile, Postgres store. Arkiv live checks pass on Rabdi (`live:check` 9/9, `live:agents` 4/4) |
 | 5 Frontend | Partial (branch `feat/frontend`): `apps/web` Vite SPA. **Public screens (home trending, campaigns, creator card, leaderboard) read `apps/api` discovery endpoints** through a typed client, with a visibly labelled DEMO DATA fallback when the API is unreachable. Real URL routing (deep links, back/forward, 404). Campaign detail reads the campaign from the API. Creator/merchant dashboards, checkout, verify and demo shop are still **mock data only**. Wallet connect and buyer signing are built (see Frontend section); no chain or Arkiv writes. 59 unit tests. See ADR 0005. |
 | 6 SDK + demo shop | Partial (branch `feat/frontend`): `@numa/sdk-react` (verify-then-sign checkout hook, `<NumaCheckout>`, `<NumaProvider>`, 31 tests) and `apps/demo-shop` (a separate-brand store embedding it) are built. **Exercised only against a stand-in wallet, API and chain, never a real deployment.** |
-| 7 E2E | Not started |
+| 7 End-to-end | Not started (blocked on deployment) |
 
-Nothing is deployed. Gasless checkout is NOT yet demonstrated.
-
-## Contracts handoff (Member 1 → Member 2 / Member 3, per `TEAM.md`)
-- ABIs: `packages/shared/src/abis/{CampaignRegistry,NumaRouter}.json` (regenerate after any contract change: `pnpm contracts:build` then re-export, see `docs/SMART_CONTRACTS.md`).
-- Order struct + EIP-712 typed-data definition for signing: `packages/shared/src/contracts-types.ts`, re-exported from `@numa/shared` as `NumaRouterOrder` (renamed at the barrel export to avoid colliding with the pre-existing, differently-shaped `Order` type in `packages/shared/src/order.ts` — see "Interface reconciliation" below).
-- **New**: `OrderCommitment` type, `ORDER_COMMITMENT_EIP712_TYPES`, and a fixed cross-language test vector (`ORDER_COMMITMENT_TEST_VECTOR*`) — all in `packages/shared/src/contracts-types.ts`, re-exported from `@numa/shared`. Member 2 needs this to compute the buyer's EIP-3009 `nonce` correctly; see "Interface reconciliation" below and `docs/DECISIONS/0005-order-commitment-nonce-binding.md`.
-- Events to index: `OrderSettled`, `OrderRefunded`, `CommissionReleased` (NumaRouter); `CampaignCreated`, `CreatorApproved`, `CreatorRevoked`, `CampaignPaused` (CampaignRegistry).
-- Deployed addresses: `packages/shared/src/addresses.ts` — currently empty, populate after the first testnet deploy.
-- Integration requirement for merchants (frontend/SDK, Member 3): merchants must `USDT.approve(NumaRouter, ...)` to fund refunds — see the ADR.
-
-## Interface reconciliation — RESOLVED in code and tests; NOT yet verified live
-
-The four gaps below (Order shape, `payOrder`/`authNonce` calldata, `merchantOf`, `OrderSettled` indexing) have been fixed in `packages/shared/src/{order,abi,schemas}.ts`, `packages/sdk-server/src/{signer,numa}.ts`, and `apps/api/src/{services/relayer,routes/discovery,server}.ts`, and are covered by updated/new unit tests (`packages/sdk-server` 5/5, `apps/api` 40/45 — see Blockers for the 5 skipped). **This is unit/mocked-chain verification only — the full path (real buyer wallet → real relayer → real deployed `NumaRouter` → real `OrderSettled` event) has never been exercised, since nothing is deployed yet (see Phase 3 above and `docs/SMART_CONTRACTS.md` → Deployment).** Do not read this as a completed integration until that live run happens.
-
-What changed, for reference against the prior (now-fixed) proposal:
-
-1. **`Order` struct shape.** Was: `{campaignId, orderId, creator, amount, deadline}` (5 fields, no `merchant`/`buyer`). Now matches the shipped contract exactly: `{campaignId, merchant, creator, buyer, gross, orderId, deadline}` (7 fields) — the merchant signs who the expected buyer is, closing the trust-model gap, not just a naming fix.
-2. **`payOrder` calldata / `authNonce`.** `payOrder` now passes `authNonce` explicitly, computed via `computeOrderCommitment` — an exact TypeScript mirror of `NumaRouter.sol`'s `ORDER_COMMITMENT_TYPEHASH` (9 fields, `uint96` for `commissionBps`/`feeBps`), replacing the old, incompatible `deriveAuthNonce` formula. The relayer (`apps/api/src/services/relayer.ts`) independently fetches `commissionBps` (`CampaignRegistry.getCampaign`) and `feeBps` (`NumaRouter.feeBps`) and recomputes the commitment itself — it never trusts a caller-supplied nonce, preserving the "reject bad requests locally before spending gas" property the relayer already had.
-3. **`CampaignRegistry` read interface.** `campaignRegistryAbi` now exposes `getCampaign`/`isCreatorApproved`/`isSettleable` matching the real contract; the nonexistent `merchantOf` is gone. `discovery.ts`'s `merchantOf()` helper reads `getCampaign(...).merchant`.
-4. **`OrderSettled` event ABI.** Now indexes `merchant` (not `creator`) as the third topic, matching the real event; `OrderRefunded` gained the previously-missing `merchantPulled` field. `indexer.ts` and `verify.ts` needed no changes — both already decoded fields by name, not topic position.
-
-See the commit `fix(shared,sdk-server,api): reconcile backend interface with shipped contracts` for the complete file-by-file rationale, including the `Numa`/`OrderSigner` API changes needed to supply `merchant`/`commissionBps`/`feeBps` (multi-campaign-capable, read once per campaign from on-chain state, never hardcoded) and the `createOrderRequest`/`relayRequest` schema updates.
-
-## Open decisions
-- Project name: **numa** (renamed from "Outcome" by the user; brief text still says Outcome — contract is `NumaRouter`).
+## Test counts (2026-11-07, local and CI)
+Foundry 55 · `apps/api` 84 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 31 · `packages/sdk-react` 31 · `packages/sdk-server` 5 · `packages/shared` 2.
 
 ## Blockers
-- Whitechain testnet deployment needs a human-funded Foundry keystore (WBT for gas) — the agent's shell has no TTY for keystore signing. Owner: Member 1. See `docs/SMART_CONTRACTS.md` → Deployment.
-- `pnpm contracts:build` / `pnpm contracts:test` (the root package.json scripts) currently fail in this environment with a corepack signature-verification error on `pnpm@10.34.9` (network/registry issue, unrelated to the contracts code). Verified directly with `forge build` / `forge test -vv` instead — both pass (49/49 tests). Whoever has a working `pnpm` locally should confirm the root scripts also work end-to-end.
-- Live end-to-end verification (real buyer → relayer → deployed router → event decode) — blocked on the Whitechain testnet deployment above, not on the interface itself (now reconciled, see above).
-- `apps/api`'s 5 Postgres-dependent tests (`tests/pgstore.test.ts`) are skipped without `TEST_DATABASE_URL`. A Postgres instance happened to be listening on `:5432` in one verification run, but it was a different, unrelated instance (`numa`/`numa` credentials failed authentication against it) — Docker Desktop was not running, so the project's own `docker-compose` Postgres was never started. Run `docker compose up -d postgres` and set `TEST_DATABASE_URL` to exercise these.
+1. **Deployment** of `CampaignRegistry` and `NumaRouter` to Whitechain Sepolia needs a human with a funded Foundry keystore (Member 1). Then fill `packages/shared/src/addresses.ts` and `.env`.
+2. **Relayer wallet** needs WBT (it pays gas for `payOrder` and `release`).
+3. **Live end-to-end run** (zero-WBT buyer → relayer → router → indexer → Arkiv conversion → reputation) can only happen after 1 and 2.
+4. **Frontend wiring** (Member 3): wallet connect, EIP-3009 signing and the `/orders` + `/relay` calls are **built but have only run against stand-ins**. Still to build: merchant `USDT.approve(NumaRouter)` for refunds (ADR 0001), Arkiv writes from the browser wallet (offers, links, profile, agent binding), the agents UI (policy form, agent-activity feed, binding), and the merchant dashboard (needs offers/orders endpoints).
 
-## Documentation
-Written: DESIGN, ARCHITECTURE (Mermaid), SMART_CONTRACTS (now reflects the actual implemented contracts, not just design — see `docs/SMART_CONTRACTS.md`), ARKIV, WHITECHAIN, RELAYER, API, SECURITY, SDK (target design), DEVELOPMENT, DEMO (plan), DECISIONS 0001 (refund model, **Accepted** — matches the implemented contracts), 0002, 0003, 0004 (superseded refund-model draft, preserved for history), 0005 (`OrderCommitment` EIP-3009 nonce binding, **Accepted** — mentor security review fix). Docs for unbuilt parts are labeled as plans.
+## Not verified (do not claim these)
+- Any path through a deployed `NumaRouter` or `CampaignRegistry`: relay, reconciler, release keeper, click-stats verification, `merchantVerified`, agent runner against the registry.
+- Gasless `receiveWithAuthorization` with a real transfer (the token domain and selectors are verified, the transfer is not).
+- Arkiv entity expiry actually firing, full 100-row pages, large payloads, browser-wallet writes.
+- The Claude note path of the agents against the real API (tests use a fake client).
+- The Docker `app` compose profile (config-validated only; the API image itself was built and its `/health` checked).
 
-## SDK
-`@numa/sdk-server` (`Numa`, `OrderSigner`) built and unit-tested (5 tests); API uses it. Updated to the reconciled interface (see "Interface reconciliation" above) — `merchant`/`commissionBps`/`feeBps` are now required inputs, read from on-chain campaign/router state, never hardcoded. `@numa/sdk-react` and `apps/demo-shop`: not started (Member 3).
+## Contracts handoff (Member 1 → 2 / 3)
+- ABIs: `packages/shared/src/abis/{CampaignRegistry,NumaRouter}.json` (regenerate after any contract change; see `SMART_CONTRACTS.md`). The checked-in `NumaRouter.json` may lag the compiled ABI by the new `MAX_REFUND_WINDOW` constant, which nothing uses.
+- Order struct and typed data: `packages/shared/src/contracts-types.ts` (exported as `NumaRouterOrder`; `Order` in `order.ts` is the backend's own view). `OrderCommitment` type, EIP-712 types and a cross-language test vector live there too; the TypeScript digest equals the Solidity one (tested).
+- Events to index: `OrderSettled`, `OrderRefunded`, `CommissionReleased` (router); `CampaignCreated`, `CreatorApproved`, `CreatorRevoked`, `CampaignPaused` (registry).
+- Deployed addresses: `packages/shared/src/addresses.ts` (empty until the first deploy).
+- Merchants must `USDT.approve(NumaRouter, …)` to fund refunds (ADR 0001).
+- **Commission is per campaign.** `createCampaign(payoutSigner, commissionBps, endsAt)` is immutable; `approveCreator(campaignId, creator)` only whitelists a creator and carries no rate.
 
-## Creator discovery layer (Member 2)
-Built and tested offline: `numa.profile`, `numa.invite`, `numa.endorsement`; creator search, trending, recommendations, leaderboard, creator card, invite verification; endorsement and conversion verification against `OrderSettled`. **Not verified live:** no Arkiv write/read round trip against this specific layer yet (Arkiv's own `live:check` passed separately, see below); `discovery.ts` now correctly reads `getCampaign(campaignId).merchant` (fixed, see "Interface reconciliation" above). Frontend for these: screens exist with mock data, not yet wired (Member 3).
+## Backend interface reconciliation (resolved in code and tests, not live)
+The backend's pre-contract proposal differed from what Member 1 shipped. Fixed in `packages/shared`, `packages/sdk-server` and `apps/api`: (1) the `Order` struct is now `{campaignId, merchant, creator, buyer, gross, orderId, deadline}`; (2) `payOrder` passes an explicit `authNonce` computed as `OrderCommitment` (the relayer recomputes it from on-chain `commissionBps` and `feeBps` and never trusts a supplied nonce); (3) the registry is read through `getCampaign(id)` (there is no `merchantOf`); (4) the `OrderSettled` ABI indexes `merchant` and `OrderRefunded` has `merchantPulled`.
 
-## Arkiv live readiness (Member 2)
-Rabdi-safe writer built (5 tests). Three dev wallets generated locally into `.env` (writer / test merchant / test creator; addresses only in `live:check` output). `live:check --check` confirmed Rabdi chain 7794095 and 1 gwei gas; **Update 2026-11-06: funded and run — `live:check` passed 7/7 on Rabdi** (see `ARKIV.md` → Verified). The writer is the team's own funded Arkiv account; the two test wallets are throwaway.
+## Backend features (Member 2)
+- **Relayer:** fixed target, local verification of the buyer's authorization, simulate-first, gas ceiling, daily cap, per-address limit; claim statuses `claimed → sent → settled | reverted`; reconciler resolves timeouts from the chain (`RELAYER.md`).
+- **Release keeper:** queues every settlement and calls `release` after the refund window using chain time, never double-sending (`RELAYER.md`).
+- **Indexer + Arkiv:** mirrors `OrderSettled` into `numa.conversion`, idempotent by `orderId`; reputation counts only conversions verified against the event (`API.md`).
+- **Click tracker:** `/r/:code` counts clicks (hashed visitor) and `demo:fake-clicks` shows 500 clicks next to 0 verified sales (`DEMO.md`).
+- **Discovery:** campaigns, trending, creator search, leaderboard, creator card, recommendations, invites (`API.md`, `ARKIV.md`). Seeded with `[DEMO]` data on Rabdi via `seed:demo`; those campaign ids do not exist on-chain and show as unverified.
+- **Operational:** CORS allowlist (`CORS_ORIGINS`), discovery timeout (504 after `DISCOVERY_TIMEOUT_MS`), Postgres migrations (001-005), Dockerfile.
+- **Negotiation agents** (`AGENTS.md`, ADR 0008, **Proposed**): `numa.agent` and `numa.negotiation` entities, rules engine with private guardrails, signed policy API, verified threads, deal tickets, runner loop (off unless `AGENT_WALLET_PRIVATE_KEY` is set), optional Claude phrasing. Not built: any UI, a browser onboarding flow, a live run against a registry.
+
+## Open decisions
+- **Merchant signing model.** `POST /orders` signs with a server-held `MERCHANT_SIGNER_KEY` (demo). Real merchants sign in their own backend with `@numa/sdk-server`; a hosted flow needs the merchant's own signature or a registered `payoutSigner`.
+- **Agents in the pitch.** ADR 0008 is Proposed and needs team review.
+- **Claude co-author trailers in git history.** Old commits on `main` carry `Co-Authored-By: Claude`. The team agreed to clean this up last; it needs a history rewrite and everyone to re-sync, so it must happen before the repo is made public.
+- **ADR numbers:** 0001-0008 (0004 is a superseded draft).
 
 ## Frontend (Member 3)
 `apps/web` was generated from Figma (`docs/FIGMA_PROMPT.md`) and revised: non-overlapping hero, larger `numa` wordmark, warmer palette, CSS/JS animation (no animation library; respects `prefers-reduced-motion`), self-hosted fonts.
@@ -71,11 +73,6 @@ Verified: 31 sdk-react + 31 web unit tests (incl. security checks mutation-teste
 **Still mock:** the merchant app, verify page, and the offers/links/profile tabs. **Not built:** on-chain and Arkiv writes from the UI (create campaign, approve, publish offers/links/profile), merchant `USDT.approve(NumaRouter)` step (ADR 0001).
 **Backend note (resolved):** the CORS allowlist and server-side discovery timeout I asked Member 2 for have landed (see "Backend update" below). For a deployed web app set `CORS_ORIGINS` on the API and `VITE_API_URL` on the web build; in dev the Vite proxy still avoids CORS.
 Gasless checkout is still NOT demonstrated.
-## Backend foundation additions (Member 2)
-Done and tested locally: relay-outcome tracking + chain reconciler (`GET /relay/:orderId`), attribution-link click tracker + stats + `demo:fake-clicks` script (ran 500 clicks against a live local server), automatic release keeper (queue + chain-time checks + no double sends), Arkiv live checks for sorting/pagination (9/9 on Rabdi), API Dockerfile (built, run, healthy), ESLint (clean), CI workflow (YAML-validated only, not yet run on GitHub). 70 API tests + 26 arkiv + 5 sdk-server + 2 shared. **Still unverified live:** the keeper, reconciler and click stats have never run against a deployed router; they depend on the Whitechain deployment.
 
-## Backend update (Member 2): CORS, discovery timeout, demo seed
-- `CORS_ORIGINS` (comma-separated allowlist, `*` allowed; empty = no CORS headers). Preflight answered with 204. Tested.
-- `DISCOVERY_TIMEOUT_MS` (default 15000): `/discovery/*` and `/creators/*` return 504 `UPSTREAM_TIMEOUT` instead of hanging when Arkiv stalls. Tested with a never-resolving fake.
-- `pnpm --filter @numa/arkiv seed:demo [-- --yes]`: dry run by default. Seeded Rabdi with 4 campaigns (ids 7001-7004), 4 creator profiles and 4 offers, all prefixed `[DEMO]`. Idempotent. These campaign ids do not exist on-chain, so they show as not merchant-verified, and there are no conversions or scores: no sale is faked.
-- Repo hygiene found after merging the frontend: `pnpm-lock.yaml` on `main` had a duplicated key (broke `--frozen-lockfile`, so CI); regenerated. ESLint: removed a reference to an unregistered react-hooks rule and downgraded unused-vars to warnings under `apps/web/src` (not-yet-routed screens). Two ADRs are numbered 0005 (web SPA vs OrderCommitment): one needs renumbering.
+## Documentation
+Index in `docs/README.md`. Docs describing unbuilt parts are labelled as plans.

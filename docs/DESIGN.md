@@ -32,57 +32,59 @@ See `ARCHITECTURE.md`. Components: web app, API (order service + relayer + index
 ## 9. Components
 | Component | Owner | Status |
 |---|---|---|
-| `packages/contracts` (CampaignRegistry, NumaRouter) | Member 1 | [planned] |
-| `apps/api` order service, relayer | Member 2 | [built] unit-tested with mocked chain |
-| `packages/arkiv` | Member 2 | [built] offline-tested; no live write yet |
-| indexer, reputation | Member 2 | [planned] |
-| `apps/web`, `apps/demo-shop`, `packages/sdk-react` | Member 3 | [planned] |
-| `packages/sdk-server` | Member 2/3 | [planned] |
+| `packages/contracts` (CampaignRegistry, NumaRouter) | Member 1 | [built] 55 local tests; **not deployed** |
+| `apps/api` order service, relayer, reconciler, release keeper | Member 2 | [built] tested with mocked chain; never run against a deployed router |
+| `packages/arkiv` | Member 2 | [built] live round trips pass on Rabdi |
+| indexer, reputation, discovery API, click tracker | Member 2 | [built] tested offline; not run against a deployed router |
+| negotiation agents (`docs/AGENTS.md`) | Member 2 | [built backend, ADR 0008 Proposed] no UI |
+| `apps/web` | Member 3 | [partial] public screens read the API; checkout and dashboards are mock |
+| `packages/sdk-server` | Member 2/3 | [built] unit-tested |
+| `packages/sdk-react`, `apps/demo-shop` | Member 3 | [planned] |
 
 ## 10. Whitechain integration
 See `WHITECHAIN.md`. Chain 1874; USDT is an EIP-1967 proxy whose implementation exposes EIP-3009 (`receiveWithAuthorization`). Money moves only on Whitechain.
 
 ## 11. Arkiv integration
-See `ARKIV.md`. Five wallet-owned entity types; Arkiv holds no funds or secrets; readers verify ownership.
+See `ARKIV.md`. Eight wallet-owned entity types (campaign, offer, decision, link, conversion, profile, invite, endorsement) plus two for negotiation agents (`numa.agent`, `numa.negotiation`); Arkiv holds no funds or secrets; readers verify ownership.
 
-### 11a. Creator discovery layer [built, offline-tested]
-Arkiv is the marketplace's directory, not a cache: creators publish **profiles** (searchable, expiring, renewable), merchants publish **campaigns**, **invites** and **endorsements**, the Numa writer publishes **conversions**. The API only ever *verifies and ranks*: money facts come from `OrderSettled`, ownership from Arkiv owner + `CampaignRegistry.merchantOf`. Merchants search creators by niche/price/availability; creators get recommended campaigns and verified invites; everyone sees trending campaigns and a verified-sales leaderboard. See `ARKIV.md` for the trust table.
+### 11a. Creator discovery layer [built; live-verified on Rabdi for the Arkiv side]
+Arkiv is the marketplace's directory, not a cache: creators publish **profiles** (searchable, expiring, renewable), merchants publish **campaigns**, **invites** and **endorsements**, the Numa writer publishes **conversions**. The API only ever *verifies and ranks*: money facts come from `OrderSettled`, ownership from the Arkiv owner compared with `CampaignRegistry.getCampaign(id).merchant`. Merchants search creators by niche/price/availability; creators get recommended campaigns and verified invites; everyone sees trending campaigns and a verified-sales leaderboard. See `ARKIV.md` for the trust table.
 
 ## 12. Contract architecture
 See `SMART_CONTRACTS.md`.
 
-## 13. EIP-712 order design [partial: types in `packages/shared`, contract not written]
-Merchant signs `Order{campaignId, orderId, creator, amount, deadline}` under domain `NumaRouter`/`1`/chainId/router. The router recovers the signer and requires it to equal the campaign's payout signer. `orderId` is single-use. **Proposal pending Member 1's review.**
+## 13. EIP-712 order design [built]
+Merchant signs `Order{campaignId, merchant, creator, buyer, gross, orderId, deadline}` under domain `NumaRouter`/`1`/chainId/router. The router recovers the signer and requires it to equal the campaign's payout signer. `orderId` is single-use. The merchant signs who the expected buyer is, so the order cannot be redirected to another payer.
 
 ## 14. EIP-3009 authorization flow
-Buyer signs `ReceiveWithAuthorization{from, to=router, value=amount, validAfter, validBefore, nonce}` under the USDT domain (`Tether USD`/`1`/1874/proxy address). `nonce = keccak256(abi.encode(orderDigest, creator))`, binding the payment to one order and creator. `receiveWithAuthorization` requires `msg.sender == to`, so the router is the caller; a front-runner cannot redirect funds. Not yet exercised with a real transfer.
+Buyer signs `ReceiveWithAuthorization{from, to=router, value=amount, validAfter, validBefore, nonce}` under the USDT domain (`Tether USD`/`1`/1874/proxy address). `nonce` is the `OrderCommitment` digest of the full order plus `commissionBps` and `feeBps` (ADR 0005), binding the payment to exactly one order, creator and split. `receiveWithAuthorization` requires `msg.sender == to`, so the router is the caller; a front-runner cannot redirect funds. Not yet exercised with a real transfer on a deployed router.
 
-## 15. Relayer architecture [built, mocked]
-See `RELAYER.md`. Fixed target/function, guard checks, simulation, receipt verification, caps.
+## 15. Relayer architecture [built, mocked chain]
+See `RELAYER.md`. Fixed target/function, guard checks, simulation, receipt verification, caps, reconciliation of uncertain sends, and a keeper that releases commission after the refund window.
 
-## 16. Refund mechanism [planned — decision pending]
-Merchant net is paid instantly, so the router cannot refund from funds it no longer holds. See `DECISIONS/0001-refund-funding-model.md`.
+## 16. Refund mechanism [built, decision accepted]
+Merchant net is paid instantly, so the router cannot refund from funds it no longer holds: refunds are pulled from the merchant (who must `USDT.approve` the router) with a proportional clawback of held commission. See `DECISIONS/0001-refund-funding-model.md`.
 
 ## 17. Commission accounting
 `commission = gross·commissionBps/10000`, `fee = gross·feeBps/10000`, `merchantNet = gross − commission − fee`, all rounded down, feeBps ≤ 100, commissionBps ≤ 5000. Held commission tracked per order; proportional clawback on refund; release after window. Invariant: held + released + clawed = commission.
 
-## 18. Creator reputation [planned]
+## 18. Creator reputation [built]
 Computed only from conversions whose `txHash` matches an `OrderSettled` event with identical creator, merchant, campaign and amounts. Inputs: gross settled sales, distinct payers, verified conversion count, commission earned. Weighting by gross and distinct payers. No history → "No verified sales history yet." Limitations: self-purchase from alternate wallets and sybils are not detected; the score does not prove audience authenticity.
 
 ## 19. Data models
-On-chain: campaigns, approvals, orders (`SMART_CONTRACTS.md`). Arkiv: `ARKIV.md`. Postgres (operational only): order sessions, relayer claims/spend, indexer cursor, cache [planned; relayer currently in-memory].
+On-chain: campaigns, approvals, orders (`SMART_CONTRACTS.md`). Arkiv: `ARKIV.md`. Postgres (operational only): relayer claims and spend, per-address counts, indexer cursor, release queue, click analytics, private agent policies [built]; order sessions [not built]. Marketplace data is in Arkiv, money in the contracts.
 
 ## 20. API design
-`API.md` (implemented: `/health`, `/orders`, `/relay`). Planned: `/campaigns` (read-through), `/creators/:addr/reputation`, `/orders/:id` status.
+`API.md`: orders and relaying, link click tracking, discovery and reputation, and negotiation agents. All implemented.
 
-## 21. SDK design [planned]
+## 21. SDK design [server built, React planned]
 `SDK.md`.
 
 ## 22. Security model / 23. Threat model
 `SECURITY.md`.
 
 ## 24. Deployment architecture
-Contracts: Foundry to Whitechain Sepolia via keystore (human-run). API: single Node service + Postgres via Docker Compose. Web: Next.js. Relayer key funded with WBT; Arkiv writer wallet funded with tGLM.
+Contracts: Foundry to Whitechain Sepolia via keystore (human-run). API: single Node service + Postgres via Docker Compose. Web: Vite SPA (ADR 0007). Relayer key funded with WBT; Arkiv writer wallet funded with tGLM.
 
 ## 25. Failure handling
 Relayer: simulation failure → reject, nothing sent; timeout → keep claim, require explorer check before retry; reverted → report. Indexer: idempotent by `orderId`; resume from stored block cursor. Arkiv lag: UI reads chain events as source of truth for money.

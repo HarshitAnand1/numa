@@ -1,5 +1,5 @@
 # Architecture diagrams
-Diagrams show the **target** design. Implemented parts: relayer/order service (mocked-chain tests), Arkiv module (offline tests). Contracts, indexer, frontend are planned.
+Diagrams show the intended flows. Built and tested: contracts (local), relayer, reconciler, release keeper, indexer, Arkiv module (live-verified on Rabdi), discovery/reputation API, negotiation agents. The frontend's checkout is still mock and nothing is deployed, so no flow here has run end to end on a live chain; see `PROJECT_STATUS.md`.
 
 ## System
 ```mermaid
@@ -138,9 +138,24 @@ flowchart LR
   Me -->|publish after sale| E[numa.endorsement]
   W[Numa writer] -->|publish| V[numa.conversion]
   P & C & I & E & V --> API[API: verify + rank]
-  CH[(Whitechain: OrderSettled, merchantOf)] --> API
+  CH[(Whitechain: OrderSettled, getCampaign.merchant)] --> API
   API --> S1[creator search]
   API --> S2[recommendations]
   API --> S3[trending / leaderboard]
   API --> S4[creator card]
+```
+
+## Negotiation agents (see AGENTS.md, ADR 0008)
+```mermaid
+flowchart LR
+  Cr[Creator] -->|publish| O[numa.offer]
+  Cr & Me[Merchant] -->|bind, revocable| B[numa.agent]
+  PG[(Postgres: private guardrails)] --> R
+  O & B --> R[Agent runner]
+  R -->|rules engine decides| N[numa.negotiation]
+  R -.->|optional: note text only| L[Claude]
+  CH[(Whitechain: getCampaign.merchant)] --> R
+  N --> D[Deal ticket]
+  D -->|merchant signs| Reg[CampaignRegistry.approveCreator / createCampaign]
+  Reg --> Sale[Real USDT sale via NumaRouter]
 ```

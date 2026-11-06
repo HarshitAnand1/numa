@@ -4,3 +4,4 @@ export * from "./client.js";
 export * from "./entities.js";
 export * from "./creators.js";
 export * from "./safeWriter.js";
+export * from "./agents.js";
