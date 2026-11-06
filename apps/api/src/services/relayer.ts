@@ -1,9 +1,9 @@
 import { recoverTypedDataAddress, type Address, type Hex, type PublicClient, type WalletClient, type Account } from "viem";
-import { deriveAuthNonce, numaRouterAbi, orderDigest, orderTypedData, type RelayRequest } from "@numa/shared";
+import { USDT_ADDRESS, deriveAuthNonce, numaRouterAbi, orderDigest, orderTypedData, receiveAuthTypedData, type RelayRequest } from "@numa/shared";
 import type { RelayStore } from "./store.js";
 
 export type RelayErrorCode =
-  | "ORDER_EXPIRED" | "BAD_AUTH_WINDOW" | "BAD_SELF_PURCHASE" | "BAD_MERCHANT_SIG" | "DUPLICATE"
+  | "ORDER_EXPIRED" | "BAD_AUTH_WINDOW" | "BAD_SELF_PURCHASE" | "BAD_MERCHANT_SIG" | "BAD_BUYER_AUTH" | "DUPLICATE"
   | "GAS_PRICE_TOO_HIGH" | "DAILY_CAP_EXCEEDED" | "ADDRESS_LIMIT_EXCEEDED" | "INSUFFICIENT_RELAYER_BALANCE"
   | "SIMULATION_FAILED" | "TX_REVERTED" | "TX_TIMEOUT";
 
@@ -17,6 +17,8 @@ export interface RelayerConfig {
   maxGasPriceWei: bigint;
   dailyCapWei: bigint;
   perAddressDailyLimit: number;
+  /** USDT token whose EIP-712 domain the buyer signs under. Defaults to the verified test USDT. */
+  token?: Address;
   receiptTimeoutMs?: number;
 }
 
@@ -52,6 +54,18 @@ export class Relayer {
     try {
       await recoverTypedDataAddress({ ...orderTypedData(order, this.cfg.chainId, this.cfg.router), signature: req.merchantSig });
     } catch { throw new RelayError("BAD_MERCHANT_SIG", "unrecoverable merchant signature"); }
+
+    // The buyer's EIP-3009 authorization must be exactly for this order: recipient = router, value = amount,
+    // nonce derived from the order digest + creator (never taken from the request). A wrong nonce, amount,
+    // recipient or signer recovers to a different address and is rejected before any RPC or gas is spent.
+    const nonce = deriveAuthNonce(orderDigest(order, this.cfg.chainId, this.cfg.router), order.creator);
+    const authTyped = receiveAuthTypedData(
+      { from: buyer, router: this.cfg.router, value: order.amount, validAfter: auth.validAfter, validBefore: auth.validBefore, nonce },
+      this.cfg.chainId, this.cfg.token ?? USDT_ADDRESS,
+    );
+    let authSigner: Address | undefined;
+    try { authSigner = await recoverTypedDataAddress({ ...authTyped, signature: { r: auth.r, s: auth.s, v: BigInt(auth.v) } }); } catch { /* falls through */ }
+    if (!authSigner || authSigner.toLowerCase() !== lower) throw new RelayError("BAD_BUYER_AUTH", "buyer authorization does not match this order");
 
     if (!(await this.store.claimOrder(order.orderId, buyer))) throw new RelayError("DUPLICATE", "order already submitted");
     let keepClaim = false;
