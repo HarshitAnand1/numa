@@ -2,6 +2,7 @@ import type { Hex } from "viem";
 import type pg from "pg";
 import type { ClaimRecord, ClaimStatus, RelayStore } from "../services/store.js";
 import type { CursorStore } from "../services/indexer.js";
+import type { ClickStats, ClickStore } from "../services/clicks.js";
 
 /** Postgres-backed relayer state: survives restarts, safe across multiple API instances. */
 export class PgRelayStore implements RelayStore {
@@ -63,5 +64,16 @@ export class PgCursorStore implements CursorStore {
   }
   async set(block: bigint) {
     await this.pool.query("INSERT INTO indexer_cursor (id, block) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET block = EXCLUDED.block", [this.id, block.toString()]);
+  }
+}
+
+export class PgClickStore implements ClickStore {
+  constructor(private readonly pool: pg.Pool) {}
+  async record(code: string, visitor: string) {
+    await this.pool.query("INSERT INTO link_clicks (code, visitor) VALUES ($1, $2)", [code, visitor]);
+  }
+  async stats(code: string): Promise<ClickStats> {
+    const r = await this.pool.query("SELECT count(*)::int AS clicks, count(DISTINCT visitor)::int AS unique_visitors FROM link_clicks WHERE code = $1", [code]);
+    return { clicks: r.rows[0].clicks, uniqueVisitors: r.rows[0].unique_visitors };
   }
 }

@@ -4,6 +4,8 @@
 |---|---|---|
 | GET | `/health` | liveness, relayer address and WBT balance |
 | POST | `/orders` | **Demo** merchant order service: signs an EIP-712 `Order` with `MERCHANT_SIGNER_KEY`. Real merchants sign in their own backend (`@numa/sdk-server`, not built yet). 501 if key unset |
+| GET | `/r/:code` | Attribution-link click tracker: records the click (salted hash of ip+user-agent, never the raw ip) and 302s to `CHECKOUT_BASE_URL/checkout/<code>`. Rate limit is deliberately high (`CLICK_RATE_LIMIT_PER_MINUTE`, default 3000): bot traffic is counted, not blocked. **Clicks never create commission.** |
+| GET | `/links/:code/stats?creator&campaignId` | `{clicks, uniqueVisitors, settled}`; with Arkiv configured, the link must be owned by `creator` and `settled` counts only chain-verified sales (`verifiedConversions`, `grossSettled`, `commissionEarned`) |
 | GET | `/relay/:orderId` | Relay outcome for an order: `{orderId, status: claimed\|sent\|settled\|reverted, txHash, explorer}`; 404 if unknown |
 | POST | `/relay` | Submit buyer's EIP-3009 authorization + signed order; relayer calls `payOrder` |
 
