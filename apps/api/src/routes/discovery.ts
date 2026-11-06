@@ -15,6 +15,8 @@ export interface DiscoveryDeps {
   registry?: Address;
   cache?: SettledCache;
   now?: () => number;
+  /** Max ms per request before a 504; Arkiv queries can stall without an access key. Default 15000. */
+  timeoutMs?: number;
 }
 
 const ser = (v: unknown): unknown => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? x.toString() : x)));
@@ -22,6 +24,13 @@ const num = (v: unknown, d: number, max: number) => { const n = Number(v); retur
 
 export function registerDiscoveryRoutes(app: FastifyInstance, d: DiscoveryDeps) {
   const now = d.now ?? (() => Math.floor(Date.now() / 1000));
+  const timeoutMs = d.timeoutMs ?? 15_000;
+  // Bound every discovery request: race the handler against a timer and answer 504 instead of hanging.
+  app.addHook("preHandler", async (req, reply) => {
+    if (!req.url.startsWith("/discovery") && !req.url.startsWith("/creators")) return;
+    const timer = setTimeout(() => { if (!reply.sent) void reply.code(504).send({ error: "UPSTREAM_TIMEOUT", message: "Arkiv query timed out" }); }, timeoutMs);
+    reply.raw.once("close", () => clearTimeout(timer));
+  });
   const merchantCache = new Map<string, Address | null>();
 
   /** On-chain merchant of a campaign (the authority). null when no registry is configured or the read fails.
