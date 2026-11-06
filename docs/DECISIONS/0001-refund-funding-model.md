@@ -19,6 +19,12 @@ Two options were considered:
 2. **Merchant-approved USDT pull.** Merchant keeps a standing `USDT.approve(NumaRouter, allowance)`
    allowance. Refunds pull the shortfall directly from the merchant's wallet.
 
+A separate, independently-drafted proposal considering the same two options (plus a third,
+rejected option) is preserved for its historical reasoning at
+`docs/DECISIONS/0004-refund-funding-model-superseded-proposal.md` — it reaches the same
+conclusion (option 2) but was not the basis for the implementation below, which was built and
+tested independently.
+
 ## Decision
 
 Use option 2: merchant-approved pull, combined with clawback of any still-held commission.
