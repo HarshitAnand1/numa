@@ -15,6 +15,9 @@ contract NumaRouterTest is Test {
     bytes32 private constant RECEIVE_WITH_AUTHORIZATION_TYPEHASH = keccak256(
         "ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
     );
+    bytes32 private constant ORDER_COMMITMENT_TYPEHASH = keccak256(
+        "OrderCommitment(uint256 campaignId,address merchant,address creator,address buyer,uint256 gross,uint96 commissionBps,uint96 feeBps,bytes32 orderId,uint256 deadline)"
+    );
     bytes32 private constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
@@ -137,9 +140,43 @@ contract NumaRouterTest is Test {
         return (commission * refundAmount) / refundableBase;
     }
 
+    /// @dev Independent (test-side) reimplementation of NumaRouter.computeOrderCommitment, used to
+    /// cross-check the contract's own computation rather than relying on it to generate its own
+    /// expected values (which would be tautological). Must stay byte-for-byte in sync with
+    /// src/NumaRouter.sol's ORDER_COMMITMENT_TYPEHASH and field order.
+    function _orderCommitment(
+        INumaRouter.Order memory order,
+        uint96 commissionBps,
+        uint96 feeBps_,
+        address verifyingContract
+    ) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                ORDER_COMMITMENT_TYPEHASH,
+                order.campaignId,
+                order.merchant,
+                order.creator,
+                order.buyer,
+                order.gross,
+                commissionBps,
+                feeBps_,
+                order.orderId,
+                order.deadline
+            )
+        );
+        bytes32 domainSeparator = _domainSeparator("NumaRouter", "1", verifyingContract);
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+    }
+
     function _payOrder(INumaRouter.Order memory order) internal {
+        // Uses the default campaign's known COMMISSION_BPS/FEE_BPS directly rather than querying
+        // the registry/router here (both would be extra external calls, which would consume
+        // vm.expectRevert's "next call" slot ahead of the actual router.payOrder() call in tests
+        // that expect an earlier revert). Tests using a different/invalid campaignId never reach
+        // the authNonce check anyway (it's validated after the earlier campaign/creator checks),
+        // so the nonce's "correctness" relative to COMMISSION_BPS/FEE_BPS doesn't matter for those.
         bytes memory sig = _signOrder(order, payoutSignerPk);
-        bytes32 nonce = order.orderId;
+        bytes32 nonce = _orderCommitment(order, COMMISSION_BPS, FEE_BPS, address(router));
         uint256 validAfter = 0;
         uint256 validBefore = order.deadline;
         (uint8 v, bytes32 r, bytes32 s) =
@@ -230,10 +267,11 @@ contract NumaRouterTest is Test {
     function test_payOrder_revertsOnInvalidMerchantSignature() public {
         INumaRouter.Order memory order = _defaultOrder(100e6, bytes32(uint256(1)));
         bytes memory wrongSig = _signOrder(order, buyerPk); // signed by the wrong key
+        bytes32 nonce = _orderCommitment(order, COMMISSION_BPS, FEE_BPS, address(router));
         (uint8 v, bytes32 r, bytes32 s) =
-            _signAuthorization(order.buyer, address(router), order.gross, 0, order.deadline, order.orderId, buyerPk);
+            _signAuthorization(order.buyer, address(router), order.gross, 0, order.deadline, nonce, buyerPk);
         vm.expectRevert("NumaRouter: invalid merchant signature");
-        router.payOrder(order, wrongSig, 0, order.deadline, order.orderId, v, r, s);
+        router.payOrder(order, wrongSig, 0, order.deadline, nonce, v, r, s);
     }
 
     function test_payOrder_revertsOnMerchantMismatch() public {
@@ -254,11 +292,15 @@ contract NumaRouterTest is Test {
         uint256 gross = 100e6;
         INumaRouter.Order memory order = _defaultOrder(gross, bytes32(uint256(1)));
         bytes memory sig = _signOrder(order, payoutSignerPk);
-        // Buyer authorizes less than the order's gross amount.
+        // Nonce matches the order commitment (so the new authNonce check passes), but the buyer's
+        // authorization signature covers a different value than order.gross, which the MockUSDT
+        // rejects at signature-recovery time — isolating the token-level value check from the
+        // router-level authNonce check added for the OrderCommitment design.
+        bytes32 nonce = _orderCommitment(order, COMMISSION_BPS, FEE_BPS, address(router));
         (uint8 v, bytes32 r, bytes32 s) =
-            _signAuthorization(order.buyer, address(router), gross - 1, 0, order.deadline, order.orderId, buyerPk);
+            _signAuthorization(order.buyer, address(router), gross - 1, 0, order.deadline, nonce, buyerPk);
         vm.expectRevert("MockUSDT: invalid authorization signature");
-        router.payOrder(order, sig, 0, order.deadline, order.orderId, v, r, s);
+        router.payOrder(order, sig, 0, order.deadline, nonce, v, r, s);
     }
 
     function testFuzz_payOrder_splitInvariant(uint256 gross, uint96 commissionBps, uint96 feeBps) public {
@@ -284,12 +326,13 @@ contract NumaRouterTest is Test {
             deadline: block.timestamp + 1 hours
         });
         bytes memory sig = _signOrderFor(order, payoutSignerPk, address(r2));
-        (uint8 v, bytes32 rr, bytes32 ss) = _signAuthForRouter(order, r2);
+        bytes32 nonce = _orderCommitment(order, commissionBps, feeBps, address(r2));
+        (uint8 v, bytes32 rr, bytes32 ss) = _signAuthForRouter(order, r2, nonce);
 
         uint256 merchantBefore = usdt.balanceOf(merchant);
         uint256 feeBefore = usdt.balanceOf(feeRecipient);
 
-        r2.payOrder(order, sig, 0, order.deadline, order.orderId, v, rr, ss);
+        r2.payOrder(order, sig, 0, order.deadline, nonce, v, rr, ss);
 
         uint256 commission = (gross * commissionBps) / 10_000;
         uint256 fee = (gross * feeBps) / 10_000;
@@ -301,17 +344,170 @@ contract NumaRouterTest is Test {
         assertEq(merchantNet + commission + fee, gross);
     }
 
-    function _signAuthForRouter(INumaRouter.Order memory order, NumaRouter r2)
+    function _signAuthForRouter(INumaRouter.Order memory order, NumaRouter r2, bytes32 nonce)
         internal
         view
         returns (uint8 v, bytes32 r, bytes32 s)
     {
         bytes32 structHash = keccak256(
-            abi.encode(RECEIVE_WITH_AUTHORIZATION_TYPEHASH, order.buyer, address(r2), order.gross, 0, order.deadline, order.orderId)
+            abi.encode(RECEIVE_WITH_AUTHORIZATION_TYPEHASH, order.buyer, address(r2), order.gross, 0, order.deadline, nonce)
         );
         bytes32 domainSeparator = _domainSeparator("Mock Tether USD", "1", address(usdt));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(buyerPk, digest);
+    }
+
+    // ---------- OrderCommitment / authNonce binding ----------
+
+    function _orderDigest(INumaRouter.Order memory order, address verifyingContract) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                ORDER_TYPEHASH,
+                order.campaignId,
+                order.merchant,
+                order.creator,
+                order.buyer,
+                order.gross,
+                order.orderId,
+                order.deadline
+            )
+        );
+        bytes32 domainSeparator = _domainSeparator("NumaRouter", "1", verifyingContract);
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+    }
+
+    function test_payOrder_revertsWhenAuthNonceDoesNotMatchCommitment() public {
+        INumaRouter.Order memory order = _defaultOrder(100e6, bytes32(uint256(1)));
+        bytes memory sig = _signOrder(order, payoutSignerPk);
+        bytes32 wrongNonce = order.orderId; // arbitrary bytes32, not the real commitment
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAuthorization(order.buyer, address(router), order.gross, 0, order.deadline, wrongNonce, buyerPk);
+        vm.expectRevert("NumaRouter: authNonce does not match order commitment");
+        router.payOrder(order, sig, 0, order.deadline, wrongNonce, v, r, s);
+    }
+
+    function test_payOrder_rejectsCreatorSubstitution() public {
+        address creatorB = makeAddr("creatorB");
+        vm.prank(merchant);
+        registry.approveCreator(campaignId, creatorB);
+
+        INumaRouter.Order memory orderA = _defaultOrder(100e6, bytes32(uint256(1)));
+        bytes32 nonceForA = _orderCommitment(orderA, COMMISSION_BPS, FEE_BPS, address(router));
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAuthorization(buyer, address(router), 100e6, 0, orderA.deadline, nonceForA, buyerPk);
+
+        // Attacker crafts a different, independently merchant-signed order for a different
+        // (also-approved) creator, same gross, and tries to settle it using the buyer's
+        // authorization that was actually bound to orderA.
+        INumaRouter.Order memory orderB = orderA;
+        orderB.creator = creatorB;
+        orderB.orderId = bytes32(uint256(2));
+        bytes memory sigB = _signOrder(orderB, payoutSignerPk);
+
+        vm.expectRevert("NumaRouter: authNonce does not match order commitment");
+        router.payOrder(orderB, sigB, 0, orderA.deadline, nonceForA, v, r, s);
+    }
+
+    function test_payOrder_rejectsCampaignAndMerchantSubstitution() public {
+        // The mentor-flagged core attack: an attacker (permissionlessly) creates their own
+        // campaign/merchant identity and an accomplice creator, then tries to redirect a
+        // buyer's authorization (signed for a legitimate order) to their own order instead.
+        address attacker = makeAddr("attacker");
+        (address attackerSigner, uint256 attackerSignerPk) = makeAddrAndKey("attackerSigner");
+        address accomplice = makeAddr("accomplice");
+
+        vm.prank(attacker);
+        uint256 attackerCampaignId = registry.createCampaign(attackerSigner, 5000, uint64(block.timestamp + 30 days));
+        vm.prank(attacker);
+        registry.approveCreator(attackerCampaignId, accomplice);
+
+        INumaRouter.Order memory legit = _defaultOrder(100e6, bytes32(uint256(1)));
+        bytes32 legitNonce = _orderCommitment(legit, COMMISSION_BPS, FEE_BPS, address(router));
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAuthorization(buyer, address(router), 100e6, 0, legit.deadline, legitNonce, buyerPk);
+
+        INumaRouter.Order memory malicious = INumaRouter.Order({
+            campaignId: attackerCampaignId,
+            merchant: attacker,
+            creator: accomplice,
+            buyer: buyer,
+            gross: 100e6,
+            orderId: bytes32(uint256(999)),
+            deadline: legit.deadline
+        });
+        bytes memory maliciousSig = _signOrder(malicious, attackerSignerPk);
+
+        vm.expectRevert("NumaRouter: authNonce does not match order commitment");
+        router.payOrder(malicious, maliciousSig, 0, legit.deadline, legitNonce, v, r, s);
+    }
+
+    function test_payOrder_rejectsOrderIdSubstitution() public {
+        INumaRouter.Order memory orderA = _defaultOrder(100e6, bytes32(uint256(1)));
+        bytes32 nonceForA = _orderCommitment(orderA, COMMISSION_BPS, FEE_BPS, address(router));
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAuthorization(buyer, address(router), 100e6, 0, orderA.deadline, nonceForA, buyerPk);
+
+        INumaRouter.Order memory orderB = orderA;
+        orderB.orderId = bytes32(uint256(2));
+        bytes memory sigB = _signOrder(orderB, payoutSignerPk);
+
+        vm.expectRevert("NumaRouter: authNonce does not match order commitment");
+        router.payOrder(orderB, sigB, 0, orderA.deadline, nonceForA, v, r, s);
+    }
+
+    function test_computeOrderCommitment_sensitiveToCommissionBps() public view {
+        INumaRouter.Order memory order = _defaultOrder(100e6, bytes32(uint256(1)));
+        bytes32 c1 = router.computeOrderCommitment(order, 1000, FEE_BPS);
+        bytes32 c2 = router.computeOrderCommitment(order, 2000, FEE_BPS);
+        assertTrue(c1 != c2);
+    }
+
+    function test_computeOrderCommitment_sensitiveToFeeBps() public view {
+        INumaRouter.Order memory order = _defaultOrder(100e6, bytes32(uint256(1)));
+        bytes32 c1 = router.computeOrderCommitment(order, COMMISSION_BPS, 50);
+        bytes32 c2 = router.computeOrderCommitment(order, COMMISSION_BPS, 60);
+        assertTrue(c1 != c2);
+    }
+
+    function testFuzz_orderCommitmentNeverCollidesWithOrderDigest(uint256 gross, uint96 commissionBps, uint96 feeBps_)
+        public
+        view
+    {
+        gross = bound(gross, 1, 1_000_000e6);
+        INumaRouter.Order memory order = _defaultOrder(gross, bytes32(uint256(1)));
+        bytes32 commitment = router.computeOrderCommitment(order, commissionBps, feeBps_);
+        bytes32 orderDigest = _orderDigest(order, address(router));
+        assertTrue(commitment != orderDigest);
+    }
+
+    /// @notice Fixed cross-language test vector (see the security design validation report).
+    /// TypeScript must independently compute the identical digest from the identical inputs.
+    /// The router is deployed at a fixed address (not wherever this test's CREATE nonce would
+    /// normally place it) because the EIP-712 domain separator depends on the verifying contract
+    /// address, and the test vector's expected digest was computed against this exact address.
+    function test_fixedVector_orderCommitmentMatchesCrossLanguageSpec() public {
+        vm.chainId(1874); // the test vector assumes Whitechain Sepolia's chain ID
+
+        address fixedRouter = 0x4444444444444444444444444444444444444444;
+        deployCodeTo(
+            "NumaRouter.sol:NumaRouter",
+            abi.encode(address(usdt), address(registry), feeRecipient, FEE_BPS, REFUND_WINDOW),
+            fixedRouter
+        );
+        NumaRouter vectorRouter = NumaRouter(fixedRouter);
+
+        INumaRouter.Order memory order = INumaRouter.Order({
+            campaignId: 7,
+            merchant: 0x1111111111111111111111111111111111111111,
+            creator: 0x2222222222222222222222222222222222222222,
+            buyer: 0x3333333333333333333333333333333333333333,
+            gross: 100_000_000,
+            orderId: bytes32(uint256(0x2a)),
+            deadline: 2_000_000_000
+        });
+
+        bytes32 commitment = vectorRouter.computeOrderCommitment(order, 1000, 50);
+        assertEq(commitment, 0x47a0866ddbb8f61bab6637439ff2adec7b94c8afb8dc57cef34220918142f1cb);
     }
 
     // ---------- refund ----------

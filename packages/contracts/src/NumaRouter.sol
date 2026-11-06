@@ -23,6 +23,18 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
         "Order(uint256 campaignId,address merchant,address creator,address buyer,uint256 gross,bytes32 orderId,uint256 deadline)"
     );
 
+    /// @notice The buyer's EIP-3009 `authNonce` must equal `computeOrderCommitment(...)` for the
+    /// order actually being settled. Binds the buyer's authorized payment to the full order and
+    /// split terms (campaign, merchant, creator, buyer, gross, commissionBps, feeBps, orderId,
+    /// deadline) so the relayer cannot pair a valid buyer authorization with a different order.
+    /// `commissionBps`/`feeBps` are read from immutable/on-chain-pinned sources at settlement time
+    /// — see docs/SECURITY.md or the design discussion for the full rationale. Field order and
+    /// types here (note `uint96`, not `uint256`, for the bps fields) MUST exactly match the
+    /// TypeScript definition in packages/shared, since the EIP-712 typehash is sensitive to both.
+    bytes32 public constant ORDER_COMMITMENT_TYPEHASH = keccak256(
+        "OrderCommitment(uint256 campaignId,address merchant,address creator,address buyer,uint256 gross,uint96 commissionBps,uint96 feeBps,bytes32 orderId,uint256 deadline)"
+    );
+
     uint96 public constant MAX_FEE_BPS = 100; // 1%
 
     IERC20 public immutable usdt;
@@ -88,6 +100,14 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
         );
         address signer = ECDSA.recover(_hashTypedDataV4(structHash), merchantSignature);
         require(signer == campaign.payoutSigner, "NumaRouter: invalid merchant signature");
+
+        // The buyer's EIP-3009 nonce must equal the order+split commitment computed fresh from
+        // the campaign's current (immutable) terms — this is what actually binds the buyer's
+        // authorized payment to this specific order, preventing a relayer or anyone else from
+        // settling a different order (different campaign/merchant/creator/amount/orderId) with
+        // the same authorization. See docs/DECISIONS for the design rationale.
+        bytes32 expectedCommitment = computeOrderCommitment(order, campaign.commissionBps, feeBps);
+        require(authNonce == expectedCommitment, "NumaRouter: authNonce does not match order commitment");
 
         // Pull the buyer's authorized USDT into this contract. EIP-3009 requires msg.sender == to,
         // so this contract must be both the caller and the recipient.
@@ -178,5 +198,31 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
 
     function getSettlement(bytes32 orderId) external view returns (Settlement memory) {
         return _settlements[orderId];
+    }
+
+    /// @notice Computes the EIP-712 digest that an EIP-3009 `authNonce` must equal to settle
+    /// `order` with the given `commissionBps`/`feeBps_`. Public so off-chain signers (the backend)
+    /// and tests can compute the exact same value independently; also used internally by
+    /// `payOrder`. See `ORDER_COMMITMENT_TYPEHASH` for field order/type requirements.
+    function computeOrderCommitment(Order calldata order, uint96 commissionBps, uint96 feeBps_)
+        public
+        view
+        returns (bytes32)
+    {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                ORDER_COMMITMENT_TYPEHASH,
+                order.campaignId,
+                order.merchant,
+                order.creator,
+                order.buyer,
+                order.gross,
+                commissionBps,
+                feeBps_,
+                order.orderId,
+                order.deadline
+            )
+        );
+        return _hashTypedDataV4(structHash);
     }
 }
