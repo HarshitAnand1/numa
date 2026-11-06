@@ -37,6 +37,13 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
 
     uint96 public constant MAX_FEE_BPS = 100; // 1%
 
+    /// @notice Upper bound on `refundWindow`, enforced at construction only. Guards against a
+    /// deployment-configuration mistake (e.g. an accidentally huge value) that would make
+    /// `release()` permanently uncallable, trapping every order's held commission forever. Not a
+    /// business-rule choice — any real refund window is expected to be far below this; it exists
+    /// purely as a sanity ceiling. Does not restrict legitimate short windows (e.g. a demo's 60s).
+    uint256 public constant MAX_REFUND_WINDOW = 365 days;
+
     IERC20 public immutable usdt;
     ICampaignRegistry public immutable registry;
     address public immutable feeRecipient;
@@ -45,17 +52,16 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
 
     mapping(bytes32 => Settlement) private _settlements;
 
-    constructor(
-        address usdt_,
-        address registry_,
-        address feeRecipient_,
-        uint96 feeBps_,
-        uint256 refundWindow_
-    ) EIP712("NumaRouter", "1") {
+    constructor(address usdt_, address registry_, address feeRecipient_, uint96 feeBps_, uint256 refundWindow_)
+        EIP712("NumaRouter", "1")
+    {
         require(usdt_ != address(0), "NumaRouter: zero usdt");
+        require(usdt_.code.length > 0, "NumaRouter: usdt is not a contract");
         require(registry_ != address(0), "NumaRouter: zero registry");
+        require(registry_.code.length > 0, "NumaRouter: registry is not a contract");
         require(feeRecipient_ != address(0), "NumaRouter: zero feeRecipient");
         require(feeBps_ <= MAX_FEE_BPS, "NumaRouter: fee too high");
+        require(refundWindow_ <= MAX_REFUND_WINDOW, "NumaRouter: refund window too long");
 
         usdt = IERC20(usdt_);
         registry = ICampaignRegistry(registry_);
@@ -111,9 +117,10 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
 
         // Pull the buyer's authorized USDT into this contract. EIP-3009 requires msg.sender == to,
         // so this contract must be both the caller and the recipient.
-        IERC3009(address(usdt)).receiveWithAuthorization(
-            order.buyer, address(this), order.gross, validAfter, validBefore, authNonce, v, r, s
-        );
+        IERC3009(address(usdt))
+            .receiveWithAuthorization(
+                order.buyer, address(this), order.gross, validAfter, validBefore, authNonce, v, r, s
+            );
 
         uint256 commission = (order.gross * campaign.commissionBps) / 10_000;
         uint256 fee = (order.gross * feeBps) / 10_000;
@@ -137,7 +144,15 @@ contract NumaRouter is INumaRouter, EIP712, ReentrancyGuard {
         if (fee > 0) usdt.safeTransfer(feeRecipient, fee);
 
         emit OrderSettled(
-            order.orderId, order.campaignId, order.merchant, order.creator, order.buyer, order.gross, merchantNet, commission, fee
+            order.orderId,
+            order.campaignId,
+            order.merchant,
+            order.creator,
+            order.buyer,
+            order.gross,
+            merchantNet,
+            commission,
+            fee
         );
     }
 
