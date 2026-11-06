@@ -259,7 +259,10 @@
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
-  transform: translateY(calc(var(--p, 0) * 9vw));
+  transform: translate(
+    calc(var(--mx, 0) * -1.6vw),
+    calc(var(--p, 0) * 9vw + var(--my, 0) * -1.1vw)
+  );
 }
 .hero-word i {
   font-style: normal;
@@ -273,13 +276,35 @@
   pointer-events: none;
 }
 .cursor-swarm span {
+  /* position + rotation are driven by useHeroFX */
   position: absolute;
+  left: 0;
+  top: 0;
   color: var(--red);
-  opacity: 0.26;
+  opacity: 0.32;
   font: 26px "JetBrains Mono";
-  transform: rotate(calc(var(--i) * 13deg));
-  animation: drift calc(6s + var(--i) * 0.45s) infinite alternate ease-in-out;
-  animation-delay: calc(var(--i) * -0.7s);
+  animation: none;
+  will-change: transform;
+}
+.pop-zero {
+  position: absolute;
+  z-index: 2;
+  color: var(--red);
+  font: 700 16px "JetBrains Mono";
+  letter-spacing: 0.04em;
+  translate: -50% -50%;
+  animation: floatZero 1s var(--expo) forwards;
+}
+@keyframes floatZero {
+  from {
+    opacity: 1;
+    scale: 1.5;
+  }
+  to {
+    opacity: 0;
+    scale: 1;
+    translate: -50% -190%;
+  }
 }
 
 @keyframes sweep {
@@ -501,4 +526,38 @@ footer {
   .menu-links {
     margin-top: 5vh;
   }
+}
+
+/* Hero depth + interaction */
+.real-signal {
+  translate: calc(var(--mx, 0) * -22px) calc(var(--my, 0) * -14px);
+}
+.hero h1 .ch {
+  transition:
+    translate 0.45s var(--expo),
+    rotate 0.45s var(--expo);
+}
+.hero h1.letters-free .ch-mask {
+  overflow: visible;
+}
+.hero h1 .stamp {
+  transition:
+    scale 0.35s var(--expo),
+    rotate 0.35s var(--expo);
+  cursor: pointer;
+}
+.hero h1 .stamp:hover {
+  scale: 1.1;
+  rotate: -4deg;
+}
+.hero h1 .stamp:active {
+  scale: 0.92;
+  rotate: 2deg;
+}
+.marquees {
+  transform: skewX(calc(var(--vel, 0) * -1deg));
+}
+
+.hero h1 {
+  user-select: none;
 }
