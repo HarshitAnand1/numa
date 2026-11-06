@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { api, ApiError } from "./api/client";
+import { addressUrl, ago, bpsToPercent, formatUsdt, shortAddress, txUrl } from "./api/format";
+import { DEMO_CREATOR, demoCampaigns, demoCreatorCard, demoLeaderboard, demoTrending } from "./api/mock";
+import { DataBadge, useResource } from "./api/useResource";
+import { toCampaignView, type CampaignView } from "./api/view";
 
 type View =
   | "home"
@@ -38,48 +43,13 @@ function viewFromPath(path: string): View {
   return (Object.entries(viewPaths).find(([, value]) => value === path)?.[0] as View) || "home";
 }
 
-const campaigns = [
-  {
-    id: "SP-008",
-    name: "NO SLEEP / DROP 08",
-    category: "streetwear",
-    region: "global",
-    commission: 18,
-    ends: "2d 14h",
-    offers: 42,
-    verified: "verified",
-  },
-  {
-    id: "VN-221",
-    name: "VINYL IS NOT DEAD",
-    category: "music",
-    region: "US + EU",
-    commission: 24,
-    ends: "18h 09m",
-    offers: 31,
-    verified: "unchecked",
-  },
-  {
-    id: "RN-404",
-    name: "RUN AFTER DARK",
-    category: "fitness",
-    region: "US",
-    commission: 12.5,
-    ends: "6d 03h",
-    offers: 19,
-    verified: "verified",
-  },
-  {
-    id: "BK-110",
-    name: "READ BANNED BOOKS",
-    category: "culture",
-    region: "global",
-    commission: 30,
-    ends: "9d 22h",
-    offers: 11,
-    verified: "unverified",
-  },
-];
+/**
+ * Demo campaigns for the creator/merchant dashboards, which are not wired to the API yet
+ * (they need a connected wallet). Public screens (home, campaigns, creator card, leaderboard)
+ * read the API through useResource instead.
+ */
+const demoOffers = new Map(demoTrending().map((t) => [t.campaign.campaignId, t.offerCount]));
+const campaigns: CampaignView[] = demoCampaigns().map((c) => toCampaignView(c, demoOffers.get(c.campaignId) ?? 0));
 
 const sales = [
   "rio.jpg · +8.40 USDT · 0x9f…c21 · 12s ago",
@@ -774,6 +744,15 @@ function SplitCalculator({ compact = false }: { compact?: boolean }) {
 
 function Home({ setView, ready }: { setView: (v: View) => void; ready: boolean }) {
   useHeroFX(ready);
+  const trending = useResource(
+    (s) => api.trending(10, s),
+    () => demoTrending(),
+    [],
+  );
+  const trendingViews = useMemo(
+    () => (trending.data ?? []).map((t) => toCampaignView(t.campaign, t.offerCount)),
+    [trending.data],
+  );
   return (
     <main>
       <section className="hero" data-scrub="out">
@@ -995,7 +974,7 @@ function Home({ setView, ready }: { setView: (v: View) => void; ready: boolean }
       <section className="trending">
         <div className="section-header">
           <div>
-            <span>LIVE / ARKIV-SYNCED</span>
+            <DataBadge status={trending.status} reason={trending.reason} />
             <h2>
               people are
               <br />
@@ -1007,9 +986,16 @@ function Home({ setView, ready }: { setView: (v: View) => void; ready: boolean }
           </button>
         </div>
         <div className="campaign-preview">
-          {campaigns.slice(0, 3).map((c, i) => (
-            <CampaignRow key={c.id} campaign={c} rank={i + 1} />
+          {trendingViews.slice(0, 3).map((c, i) => (
+            <CampaignRow key={c.campaignId} campaign={c} rank={i + 1} />
           ))}
+          {trending.status === "live" && trendingViews.length === 0 && (
+            <div className="empty">
+              <b>$0</b>
+              <h3>no live campaigns yet.</h3>
+              <p>Merchants publish campaigns to Arkiv. When one does, it shows up here.</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1055,7 +1041,7 @@ function VerificationBadge({ state }: { state: string }) {
   return <span className="badge unchecked">? unchecked</span>;
 }
 
-function CampaignRow({ campaign: c, rank }: { campaign: (typeof campaigns)[0]; rank: number }) {
+function CampaignRow({ campaign: c, rank }: { campaign: CampaignView; rank: number }) {
   return (
     <button
       className="campaign-row"
@@ -1092,16 +1078,61 @@ function CampaignRow({ campaign: c, rank }: { campaign: (typeof campaigns)[0]; r
 
 function Campaigns() {
   const [query, setQuery] = useState("");
-  const [minimum, setMinimum] = useState(10);
-  const filtered = useMemo(
-    () =>
-      campaigns.filter(
+  const [minimum, setMinimum] = useState(0);
+  const [category, setCategory] = useState("");
+  const [region, setRegion] = useState("");
+  const [sort, setSort] = useState<"offers" | "commission" | "endingSoon">("offers");
+  // Filters the API understands are applied server-side; text search stays local.
+  const list = useResource(
+    (s) =>
+      api.campaigns(
+        {
+          category: category || undefined,
+          region: region || undefined,
+          minCommissionBps: minimum ? minimum * 100 : undefined,
+          sort: sort === "offers" ? undefined : sort,
+          limit: 100,
+        },
+        s,
+      ),
+    () => demoCampaigns(),
+    [category, region, minimum, sort],
+  );
+  const hot = useResource(
+    (s) => api.trending(100, s),
+    () => demoTrending(),
+    [],
+  );
+  const offerCounts = useMemo(
+    () => new Map((hot.data ?? []).map((t) => [t.campaign.campaignId, t.offerCount])),
+    [hot.data],
+  );
+  const views = useMemo(() => {
+    let rows = (list.data ?? []).map((c) => toCampaignView(c, offerCounts.get(c.campaignId) ?? 0));
+    if (list.status === "demo") {
+      // demo data is not filtered by a server, so mimic the same filters locally
+      rows = rows.filter(
         (c) =>
           c.commission >= minimum &&
-          (c.name + c.category).toLowerCase().includes(query.toLowerCase()),
-      ),
-    [query, minimum],
+          (!category || c.category === category) &&
+          (!region || c.region === region),
+      );
+      if (sort === "commission") rows.sort((x, y) => y.commission - x.commission);
+      if (sort === "endingSoon") rows.sort((x, y) => x.endsAt - y.endsAt);
+    }
+    if (sort === "offers") rows.sort((x, y) => y.offers - x.offers || y.commission - x.commission);
+    const q = query.trim().toLowerCase();
+    return q ? rows.filter((c) => (c.name + c.category).toLowerCase().includes(q)) : rows;
+  }, [list.data, list.status, offerCounts, query, minimum, category, region, sort]);
+  const categories = useMemo(
+    () => Array.from(new Set((list.data ?? []).map((c) => c.category).filter(Boolean))).sort(),
+    [list.data],
   );
+  const regions = useMemo(
+    () => Array.from(new Set((list.data ?? []).map((c) => c.region).filter(Boolean))).sort(),
+    [list.data],
+  );
+  const topThree = [...views].sort((a, b) => b.offers - a.offers).slice(0, 3);
   return (
     <main className="page campaigns-page">
       <div className="page-poster">
@@ -1119,9 +1150,12 @@ function Campaigns() {
       </div>
       <div className="trending-strip">
         <b>TRENDING NOW</b>
-        <span>01 NO SLEEP / DROP 08</span>
-        <span>02 VINYL IS NOT DEAD</span>
-        <span>03 RUN AFTER DARK</span>
+        {topThree.map((c, i) => (
+          <span key={c.campaignId}>
+            0{i + 1} {c.name}
+          </span>
+        ))}
+        {!topThree.length && <span>nothing trending yet</span>}
       </div>
       <div className="market-layout">
         <aside className="filters">
@@ -1151,20 +1185,24 @@ function Campaigns() {
           </label>
           <label>
             <span>CATEGORY</span>
-            <select>
-              <option>all categories</option>
-              <option>streetwear</option>
-              <option>music</option>
-              <option>culture</option>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">all categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </label>
           <label>
             <span>REGION</span>
-            <select>
-              <option>anywhere</option>
-              <option>global</option>
-              <option>US</option>
-              <option>EU</option>
+            <select value={region} onChange={(e) => setRegion(e.target.value)}>
+              <option value="">anywhere</option>
+              {regions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
             </select>
           </label>
           <button
@@ -1172,6 +1210,9 @@ function Campaigns() {
             onClick={() => {
               setQuery("");
               setMinimum(0);
+              setCategory("");
+              setRegion("");
+              setSort("offers");
             }}
           >
             reset everything
@@ -1179,21 +1220,38 @@ function Campaigns() {
         </aside>
         <section className="market-list">
           <div className="list-head">
-            <span>{filtered.length} CAMPAIGNS / LIVE</span>
-            <select aria-label="Sort">
-              <option>live offers ↓</option>
-              <option>commission ↓</option>
-              <option>ending soon</option>
+            <span>
+              {views.length} CAMPAIGNS · <DataBadge status={list.status} reason={list.reason} />
+            </span>
+            <select
+              aria-label="Sort"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+            >
+              <option value="offers">live offers ↓</option>
+              <option value="commission">commission ↓</option>
+              <option value="endingSoon">ending soon</option>
             </select>
           </div>
-          {filtered.map((c, i) => (
-            <CampaignRow key={c.id} campaign={c} rank={i + 1} />
+          {views.map((c, i) => (
+            <CampaignRow key={c.campaignId} campaign={c} rank={i + 1} />
           ))}
-          {!filtered.length && (
+          {list.status === "loading" && !views.length && (
+            <div className="empty">
+              <b>…</b>
+              <h3>asking arkiv.</h3>
+              <p>Reading campaigns from the wallets that own them.</p>
+            </div>
+          )}
+          {list.status !== "loading" && !views.length && (
             <div className="empty">
               <b>$0</b>
-              <h3>nothing made the cut.</h3>
-              <p>Relax the filters. This isn’t a moral failure.</p>
+              <h3>{list.status === "live" ? "nothing made the cut." : "no demo campaign matches."}</h3>
+              <p>
+                {list.status === "live"
+                  ? "No active campaign matches. Relax the filters, or ask a merchant to publish one."
+                  : "Relax the filters. This isn’t a moral failure."}
+              </p>
             </div>
           )}
         </section>
@@ -1202,73 +1260,115 @@ function Campaigns() {
   );
 }
 
-function Creator() {
+function Creator({ address }: { address?: string }) {
   const [copied, setCopied] = useState(false);
+  const [showRejected, setShowRejected] = useState(false);
+  const card = useResource(
+    (s) =>
+      address
+        ? api.creator(address, s)
+        : Promise.reject(new ApiError("sample card: open a creator from the leaderboard", "shape")),
+    () => demoCreatorCard(address ?? DEMO_CREATOR),
+    [address],
+  );
+  const c = card.data;
+  if (!c) {
+    return (
+      <main className="page creator-page">
+        <section className="creator-hero">
+          <div className="creator-id">
+            <DataBadge status="loading" />
+            <h1>
+              ASKING
+              <br />
+              ARKIV…
+            </h1>
+          </div>
+        </section>
+      </main>
+    );
+  }
+  const p = c.profile;
+  const rep = c.reputation;
+  const words = (p?.displayName || "UNNAMED CREATOR").toUpperCase().split(" ");
+  const tags = p ? [p.niche, ...p.niches].filter(Boolean) : [];
+  const unique = rep.verifiedConversions
+    ? Math.round((100 * rep.distinctPayers) / rep.verifiedConversions)
+    : 0;
+  const rejected = [...c.rejected.conversions, ...c.rejected.endorsements];
+  const avg = c.endorsements.averageRating;
+  const quote = c.endorsements.items.find((e) => e.note);
   return (
     <main className="page creator-page">
       <section className="creator-hero">
         <div className="creator-id">
-          <span>CREATOR / PUBLIC CARD</span>
-          <h1>
-            RIO
-            <br />
-            SANTOS
+          <span>
+            CREATOR / PUBLIC CARD · <DataBadge status={card.status} reason={card.reason} />
+          </span>
+          <h1 className={Math.max(...words.map((w) => w.length)) > 6 ? "long" : ""}>
+            {words.map((w, k) => (
+              <span key={k}>
+                {w}
+                {k < words.length - 1 && <br />}
+              </span>
+            ))}
           </h1>
           <div className="address">
-            <code>0x71c9…d03a</code>
+            <code>{shortAddress(c.address, 6, 4)}</code>
             <button
               onClick={() => {
-                navigator.clipboard?.writeText("0x71c9d8f03a");
+                navigator.clipboard?.writeText(c.address);
                 setCopied(true);
               }}
             >
               <Icon name={copied ? "check" : "copy"} /> {copied ? "copied" : "copy"}
             </button>
-            <button>
+            <button onClick={() => window.open(addressUrl(c.address), "_blank", "noopener")}>
               <Icon name="external" /> explorer
             </button>
           </div>
         </div>
         <div className="score">
           <small>NUMA SCORE</small>
-          <strong>87</strong>
-          <span>/ 100</span>
-          <p>based on settled sales, distinct payers, and merchant endorsements.</p>
+          <strong>{rep.score ?? "—"}</strong>
+          <span>{rep.score === null ? "" : "/ 100"}</span>
+          <p>
+            {rep.score === null
+              ? rep.label
+              : "based on settled sales, distinct payers, and merchant endorsements. It does not prove audience authenticity."}
+          </p>
           <button>how this is calculated ↗</button>
         </div>
-        <Stamp tone="green">OPEN FOR WORK</Stamp>
+        {p && (p.open ? <Stamp tone="green">OPEN FOR WORK</Stamp> : <Stamp>NOT TAKING OFFERS</Stamp>)}
       </section>
       <section className="creator-bio">
-        <p>
-          night runner, camera carrier, reluctant influencer. moving shoes, records, and things
-          built to last.
-        </p>
+        <p>{p ? p.bio || "No bio published." : "This wallet has not published a profile on Arkiv."}</p>
         <div>
-          <span>streetwear</span>
-          <span>running</span>
-          <span>photography</span>
-          <span>video / short</span>
+          {tags.map((t) => (
+            <span key={t}>{t}</span>
+          ))}
+          {p?.channel && <span>{p.channel}</span>}
         </div>
       </section>
       <section className="stat-grid">
         <div>
           <small>VERIFIED CONVERSIONS</small>
-          <strong>142</strong>
+          <strong>{rep.verifiedConversions}</strong>
           <span>chain-confirmed</span>
         </div>
         <div>
           <small>DISTINCT PAYERS</small>
-          <strong>118</strong>
-          <span>83% unique</span>
+          <strong>{rep.distinctPayers}</strong>
+          <span>{rep.verifiedConversions ? `${unique}% unique` : "—"}</span>
         </div>
         <div>
           <small>GROSS SETTLED</small>
-          <strong>8,420.00</strong>
+          <strong>{formatUsdt(rep.grossSettled)}</strong>
           <span>USDT</span>
         </div>
         <div>
           <small>COMMISSION EARNED</small>
-          <strong>1,477.80</strong>
+          <strong>{formatUsdt(rep.commissionEarned)}</strong>
           <span>USDT</span>
         </div>
       </section>
@@ -1276,42 +1376,62 @@ function Creator() {
         <div className="sales-table">
           <div className="detail-head">
             <h2>recent verified sales</h2>
-            <span>WHITECHAIN / LIVE</span>
+            <span>WHITECHAIN / {card.status === "live" ? "LIVE" : "DEMO"}</span>
           </div>
-          {[
-            ["42.00", "NO SLEEP / DROP 08", "2m ago", "0xa91…20c"],
-            ["89.00", "RUN AFTER DARK", "3h ago", "0x8bc…771"],
-            ["24.00", "VINYL IS NOT DEAD", "yesterday", "0xd03…01f"],
-          ].map((x) => (
-            <div className="sale-row" key={x[3]}>
+          {c.recentSales.map((s) => (
+            <div className="sale-row" key={s.txHash}>
               <strong>
-                +{x[0]} <small>USDT</small>
+                +{formatUsdt(s.gross)} <small>USDT</small>
               </strong>
-              <span>{x[1]}</span>
-              <span>{x[2]}</span>
-              <button>
-                {x[3]} <Icon name="external" size={15} />
+              <span>
+                campaign #{s.campaignId} · {s.status.replace("_", " ")}
+              </span>
+              <span>{ago(s.paidAt)}</span>
+              <button onClick={() => window.open(txUrl(s.txHash), "_blank", "noopener")}>
+                {shortAddress(s.txHash, 5, 3)} <Icon name="external" size={15} />
               </button>
             </div>
           ))}
+          {!c.recentSales.length && (
+            <div className="empty small">
+              <h3>no verified sales yet.</h3>
+              <p>Clicks don’t count. Only a settled USDT payment shows up here.</p>
+            </div>
+          )}
         </div>
         <aside className="endorsements">
           <div className="detail-head">
             <h2>endorsements</h2>
-            <span>4.8 / 5</span>
+            <span>{avg === null ? "none yet" : `${avg.toFixed(1)} / 5`}</span>
           </div>
-          <div className="stars">
-            ★★★★<i>★</i>
-          </div>
-          <blockquote>
-            “specific brief, clean traffic, zero nonsense.”
-            <cite>
-              — NULL OBJECTS <VerificationBadge state="verified" />
-            </cite>
-          </blockquote>
-          <button>
-            claims we ignored (and why) <span>3</span>
+          {avg !== null && (
+            <div className="stars">
+              {"★".repeat(Math.round(avg))}
+              <i>{"★".repeat(5 - Math.round(avg))}</i>
+            </div>
+          )}
+          {quote && (
+            <blockquote>
+              “{quote.note}”
+              <cite>
+                — {shortAddress(quote.merchant)} <VerificationBadge state="verified" />
+              </cite>
+            </blockquote>
+          )}
+          {!c.endorsements.count && <p className="muted">No merchant has endorsed a settled order yet.</p>}
+          <button onClick={() => setShowRejected((v) => !v)} aria-expanded={showRejected}>
+            claims we ignored (and why) <span>{rejected.length}</span>
           </button>
+          {showRejected && (
+            <ul className="rejected-list">
+              {rejected.map((r, k) => (
+                <li key={r.txHash + k}>
+                  <code>{shortAddress(r.txHash, 6, 4)}</code> {r.reason}
+                </li>
+              ))}
+              {!rejected.length && <li>nothing was rejected.</li>}
+            </ul>
+          )}
         </aside>
       </section>
     </main>
@@ -1635,18 +1755,29 @@ function HowItWorks() {
 }
 
 function Leaderboard() {
-  const leaders = [
-    { rank: 1, name: "RIO SANTOS", address: "0x71…d03", score: 87, sales: 142, gross: "8,420" },
-    { rank: 2, name: "MARA.WAV", address: "0x39…a18", score: 84, sales: 119, gross: "7,103" },
-    { rank: 3, name: "NOAH K.", address: "0x0b…910", score: 79, sales: 98, gross: "5,441" },
-    { rank: 4, name: "DEAD AIR", address: "0x82…c02", score: 76, sales: 91, gross: "4,882" },
-    { rank: 5, name: "MOTEL TV", address: "0xfa…811", score: 71, sales: 76, gross: "3,901" },
-  ];
+  const [campaignId, setCampaignId] = useState("");
+  const [days, setDays] = useState(30);
+  const board = useResource(
+    (s) => api.leaderboard({ campaignId: campaignId || undefined, days: days || undefined, limit: 20 }, s),
+    () => demoLeaderboard(),
+    [campaignId, days],
+  );
+  const options = useResource(
+    (s) => api.campaigns({ limit: 100 }, s),
+    () => demoCampaigns(),
+    [],
+  );
+  const leaders = board.data ?? [];
+  const openCreator = (creator: string) =>
+    window.dispatchEvent(new CustomEvent("nav", { detail: { view: "creator", creator } }));
+  const podium = [leaders[1], leaders[0], leaders[2]].filter(Boolean);
   return (
     <main className="page leaderboard-page">
       <section className="leader-head">
         <div>
-          <span>VERIFIED ON-CHAIN ONLY</span>
+          <span>
+            VERIFIED ON-CHAIN ONLY · <DataBadge status={board.status} reason={board.reason} />
+          </span>
           <h1>
             THE PEOPLE WHO
             <br />
@@ -1656,52 +1787,80 @@ function Leaderboard() {
         <div className="leader-filters">
           <label>
             CAMPAIGN
-            <select>
-              <option>all campaigns</option>
-              <option>NO SLEEP / DROP 08</option>
+            <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>
+              <option value="">all campaigns</option>
+              {(options.data ?? []).map((c) => (
+                <option key={c.campaignId} value={c.campaignId}>
+                  {c.name || `Campaign #${c.campaignId}`}
+                </option>
+              ))}
             </select>
           </label>
           <label>
             WINDOW
-            <select>
-              <option>last 30 days</option>
-              <option>last 7 days</option>
-              <option>all time</option>
+            <select value={days} onChange={(e) => setDays(+e.target.value)}>
+              <option value={30}>last 30 days</option>
+              <option value={7}>last 7 days</option>
+              <option value={0}>all time</option>
             </select>
           </label>
         </div>
       </section>
-      <section className="podium">
-        {[leaders[1], leaders[0], leaders[2]].map((leader) => (
-          <article className={`podium-${leader.rank}`} key={leader.rank}>
-            <span>0{leader.rank}</span>
-            <strong>{leader.score}</strong>
-            <h2>{leader.name}</h2>
-            <code>{leader.address}</code>
-            <p>{leader.sales} settled sales</p>
-            {leader.rank === 1 && <Stamp tone="green">REAL MONEY</Stamp>}
-          </article>
-        ))}
-      </section>
+      {podium.length > 0 && (
+        <section className="podium">
+          {podium.map((leader) => (
+            <article className={`podium-${leader.rank}`} key={leader.creator}>
+              <span>0{leader.rank}</span>
+              <strong>{leader.score ?? "—"}</strong>
+              <h2 className="addr">{shortAddress(leader.creator, 6, 4)}</h2>
+              <code>{formatUsdt(leader.grossSettled, 0)} USDT</code>
+              <p>{leader.verifiedConversions} settled sales</p>
+              {leader.rank === 1 && <Stamp tone="green">REAL MONEY</Stamp>}
+            </article>
+          ))}
+        </section>
+      )}
       <section className="leader-table">
         <div className="leader-row leader-labels">
           <span>RANK / CREATOR</span>
           <span>SCORE</span>
           <span>VERIFIED CONVERSIONS</span>
-          <span>30D SIGNAL</span>
+          <span>DISTINCT PAYERS</span>
           <span>GROSS SETTLED</span>
         </div>
         {leaders.map((leader) => (
-          <button className="leader-row" key={leader.rank}>
+          <button
+            className="leader-row"
+            key={leader.creator}
+            data-cursor="OPEN →"
+            onClick={() => openCreator(leader.creator)}
+          >
             <span>
-              <b>0{leader.rank}</b> {leader.name} <code>{leader.address}</code>
+              <b>0{leader.rank}</b> <code>{shortAddress(leader.creator, 6, 4)}</code>
             </span>
-            <strong>{leader.score}</strong>
-            <span>{leader.sales}</span>
-            <span className="sparkline">▁▂▃▂▄▅▄▆▇</span>
-            <span>{leader.gross} USDT</span>
+            <strong>{leader.score ?? "—"}</strong>
+            <span>{leader.verifiedConversions}</span>
+            <span>{leader.distinctPayers}</span>
+            <span>{formatUsdt(leader.grossSettled)} USDT</span>
           </button>
         ))}
+        {board.status === "live" && !leaders.length && (
+          <div className="empty">
+            <b>$0</b>
+            <h3>nobody has a verified sale yet.</h3>
+            <p>
+              The leaderboard only counts settled USDT payments that match an on-chain
+              OrderSettled event. Nothing else gets a rank.
+            </p>
+          </div>
+        )}
+        {board.status === "loading" && !leaders.length && (
+          <div className="empty">
+            <b>…</b>
+            <h3>checking the receipts.</h3>
+            <p>Matching Arkiv claims against Whitechain events.</p>
+          </div>
+        )}
       </section>
       <aside className="honesty-note">
         <b>WHAT THIS RANKING DOESN’T SAY</b>
@@ -2682,6 +2841,7 @@ function Footer({ setView }: { setView: (v: View) => void }) {
 
 export default function App() {
   const [view, setViewState] = useState<View>("home");
+  const [creator, setCreator] = useState<string | undefined>(undefined);
   const [intro, setIntro] = useState<"on" | "out" | "done">(reducedMotion() ? "done" : "on");
   const [wipe, setWipe] = useState<"idle" | "in" | "out">("idle");
   const viewRef = useRef<View>("home");
@@ -2699,14 +2859,15 @@ export default function App() {
   }, [intro]);
 
   // Page transition: black wipe up from the bottom, swap the view under it, wipe away.
-  const setView = (v: View) => {
-    if (v === viewRef.current) {
+  const setView = (v: View, creatorAddr?: string) => {
+    if (v === viewRef.current && creatorAddr === undefined) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     const swap = () => {
       viewRef.current = v;
       setViewState(v);
+      setCreator(creatorAddr); // undefined for every navigation that doesn't carry an address
       window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     };
     if (reducedMotion()) {
@@ -2723,7 +2884,15 @@ export default function App() {
   const setViewRef = useRef(setView);
   setViewRef.current = setView;
   useEffect(() => {
-    const handler = (e: Event) => setViewRef.current((e as CustomEvent<View>).detail);
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<View | { view: View; creator?: string }>).detail;
+      if (typeof d === "string") {
+        setViewRef.current(d);
+      } else {
+        // a creator address travels with the navigation so /creators/:address can load it
+        setViewRef.current(d.view, d.creator);
+      }
+    };
     window.addEventListener("nav", handler);
     return () => window.removeEventListener("nav", handler);
   }, []);
@@ -2741,7 +2910,7 @@ export default function App() {
       {view === "home" && <Home setView={setView} ready={ready} />}
       {view === "how" && <HowItWorks />}
       {view === "campaigns" && <Campaigns />}
-      {view === "creator" && <Creator />}
+      {view === "creator" && <Creator address={creator} />}
       {view === "leaderboard" && <Leaderboard />}
       {view === "creatorApp" && <CreatorApp />}
       {view === "merchant" && <MerchantApp />}

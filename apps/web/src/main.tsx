@@ -16,6 +16,7 @@ import "@fontsource/rubik-spray-paint/400.css";
 import "./index.css";
 import "./hero.css";
 import "./motion.css";
+import "./data.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
