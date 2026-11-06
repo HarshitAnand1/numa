@@ -1,4 +1,4 @@
-import { addr, defineSchema, key, str, u64, u256 } from "@arkiv-network/sdk/schema";
+import { addr, bool, defineSchema, key, str, u64, u256 } from "@arkiv-network/sdk/schema";
 
 /**
  * Numa Arkiv entity schemas. Only `.indexed()` columns can be filtered on.
@@ -52,4 +52,34 @@ export const ConversionSchema = defineSchema("numa.conversion", {
   paidAt: u64().indexed(),
   txHash: str().indexed(),
   orderId: str().indexed(),
+});
+
+/** Owner: creator. Searchable by merchants; expires in 90 days unless the creator renews it (a live profile = an active creator). */
+export const ProfileSchema = defineSchema("numa.profile", {
+  displayName: str(),
+  bio: str(),
+  niche: str().indexed(), // primary niche; matches campaign `category`
+  niches: str(), // comma-separated extra niches (display only)
+  channel: str().indexed(), // primary channel, e.g. "youtube"
+  handle: str(), // public URL/handle for the channel
+  minAskBps: u64().indexed(), // lowest commission the creator will consider
+  open: bool().indexed(), // currently open to offers/invites
+});
+
+/** Owner: merchant. A targeted invitation to one creator; 48h expiry. Trusted only if owner == campaign merchant. */
+export const InviteSchema = defineSchema("numa.invite", {
+  campaignId: u64().indexed(),
+  creator: addr().indexed(),
+  offeredBps: u64(),
+  message: str(),
+});
+
+/** Owner: merchant. A rating tied to a settled order; counted only if the tx has a matching OrderSettled from this merchant. */
+export const EndorsementSchema = defineSchema("numa.endorsement", {
+  creator: addr().indexed(),
+  campaignId: u64().indexed(),
+  orderId: str().indexed(),
+  txHash: str(),
+  rating: u64().indexed(), // 1..5
+  note: str(),
 });
