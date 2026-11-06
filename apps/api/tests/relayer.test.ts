@@ -44,7 +44,7 @@ describe("Relayer", () => {
     expect(r.blockNumber).toBe(9n);
     expect(r.gasCostWei).toBe(900n);
     expect(wallet.writeContract).toHaveBeenCalledOnce();
-    expect(store.spentToday("1970-01-01")).toBe(900n);
+    expect(await store.spentToday("1970-01-01")).toBe(900n);
   });
   it("rejects expired order", async () => {
     const { relayer, wallet } = setup();
@@ -72,7 +72,7 @@ describe("Relayer", () => {
   it("rejects gas price above ceiling and releases claim", async () => {
     const { relayer, store } = setup({ getGasPrice: vi.fn().mockResolvedValue(101n) });
     expect(await code(relayer.submit(req))).toBe("GAS_PRICE_TOO_HIGH");
-    expect(store.claimOrder(req.order.orderId)).toBe(true);
+    expect(await store.claimOrder(req.order.orderId, buyer)).toBe(true);
   });
   it("rejects when simulation fails", async () => {
     const { relayer, wallet } = setup({ simulateContract: vi.fn().mockRejectedValue(new Error("revert: NotApproved\nmore")) });
@@ -81,7 +81,7 @@ describe("Relayer", () => {
   });
   it("enforces daily gas cap", async () => {
     const { relayer, store } = setup();
-    store.addSpend("1970-01-01", 9_500n);
+    await store.addSpend("1970-01-01", 9_500n);
     expect(await code(relayer.submit(req))).toBe("DAILY_CAP_EXCEEDED");
   });
   it("enforces per-address limit", async () => {
@@ -97,7 +97,7 @@ describe("Relayer", () => {
   it("reports reverted tx and keeps the claim (no auto-retry)", async () => {
     const { relayer, store } = setup({ waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: "reverted" }) });
     expect(await code(relayer.submit(req))).toBe("TX_REVERTED");
-    expect(store.claimOrder(req.order.orderId)).toBe(false);
+    expect(await store.claimOrder(req.order.orderId, buyer)).toBe(false);
   });
   it("reports receipt timeout", async () => {
     const { relayer } = setup({ waitForTransactionReceipt: vi.fn().mockRejectedValue(new Error("timeout")) });

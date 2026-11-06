@@ -8,6 +8,9 @@ import { OrderService } from "./services/orders.js";
 import { Relayer, RelayError } from "./services/relayer.js";
 import { MemoryRelayStore } from "./services/store.js";
 import { isAddress } from "viem";
+import pg from "pg";
+import { migrate } from "./db/migrate.js";
+import { PgCursorStore, PgRelayStore } from "./db/pgStore.js";
 import { createArkivReader, createArkivWriter } from "@numa/arkiv";
 import { arkivConversionSink } from "./integrations/arkivSink.js";
 import { Indexer, MemoryCursor } from "./services/indexer.js";
@@ -20,6 +23,11 @@ export function buildServer(env: Env) {
   const pub = createPublicClient({ chain, transport });
   const relayerAccount = privateKeyToAccount(env.RELAYER_PRIVATE_KEY as `0x${string}`);
   const wallet = createWalletClient({ account: relayerAccount, chain, transport });
+  const pool = env.DATABASE_URL ? new pg.Pool({ connectionString: env.DATABASE_URL }) : undefined;
+  if (pool) {
+    app.addHook("onReady", async () => { const done = await migrate(pool); if (done.length) app.log.info({ migrations: done }); });
+    app.addHook("onClose", async () => { await pool.end(); });
+  } else app.log.warn("DATABASE_URL not set: relayer limits and indexer cursor are in-memory");
   const relayer = new Relayer(
     {
       router: env.NUMA_ROUTER_ADDRESS, chainId: env.WHITECHAIN_CHAIN_ID,
@@ -27,7 +35,7 @@ export function buildServer(env: Env) {
       dailyCapWei: parseEther(String(env.RELAYER_DAILY_CAP_WBT)),
       perAddressDailyLimit: env.RELAYER_PER_ADDRESS_DAILY_LIMIT,
     },
-    pub, wallet, relayerAccount, new MemoryRelayStore(),
+    pub, wallet, relayerAccount, pool ? new PgRelayStore(pool) : new MemoryRelayStore(),
   );
   const orders = env.MERCHANT_SIGNER_KEY
     ? new OrderService(privateKeyToAccount(env.MERCHANT_SIGNER_KEY as `0x${string}`), env.WHITECHAIN_CHAIN_ID, env.NUMA_ROUTER_ADDRESS, env.ORDER_TTL_SECONDS)
@@ -70,7 +78,7 @@ export function buildServer(env: Env) {
     const writerAccount = privateKeyToAccount(env.ARKIV_WRITER_PRIVATE_KEY as `0x${string}`);
     const reader = createArkivReader(env.ARKIV_ACCESS_KEY);
     const writer = createArkivWriter({ account: writerAccount, accessKey: env.ARKIV_ACCESS_KEY });
-    const indexer = new Indexer(pub, env.NUMA_ROUTER_ADDRESS, arkivConversionSink(reader, writer, writerAccount.address), new MemoryCursor(env.INDEXER_START_BLOCK - 1n));
+    const indexer = new Indexer(pub, env.NUMA_ROUTER_ADDRESS, arkivConversionSink(reader, writer, writerAccount.address), pool ? new PgCursorStore(pool, "router", env.INDEXER_START_BLOCK - 1n) : new MemoryCursor(env.INDEXER_START_BLOCK - 1n));
     let timer: ReturnType<typeof setInterval> | undefined;
     app.addHook("onReady", async () => {
       let busy = false;

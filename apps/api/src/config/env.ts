@@ -6,6 +6,8 @@ const key = z.string().regex(/^0x[0-9a-fA-F]{64}$/, "expected 0x + 64 hex");
 
 const schema = z.object({
   PORT: z.coerce.number().default(8787),
+  /** Postgres for relayer limits + indexer cursor. Falls back to in-memory (lost on restart) when unset. */
+  DATABASE_URL: z.string().url().optional(),
   WHITECHAIN_RPC_URL: z.string().url().refine((u) => u.startsWith("https://"), "RPC must be https"),
   WHITECHAIN_CHAIN_ID: z.coerce.number().default(1874),
   NUMA_ROUTER_ADDRESS: addr,
