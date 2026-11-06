@@ -17,6 +17,7 @@ import "./index.css";
 import "./hero.css";
 import "./motion.css";
 import "./data.css";
+import "./detail.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
