@@ -71,6 +71,13 @@ contract CampaignRegistryTest is Test {
         registry.approveCreator(id, creator);
     }
 
+    function test_approveCreator_revertsOnSelfDealing() public {
+        uint256 id = _createCampaign(merchant, 1000, uint64(block.timestamp + 7 days));
+        vm.prank(merchant);
+        vm.expectRevert("CampaignRegistry: merchant cannot be own creator");
+        registry.approveCreator(id, merchant);
+    }
+
     function test_revokeCreator() public {
         uint256 id = _createCampaign(merchant, 1000, uint64(block.timestamp + 7 days));
         vm.startPrank(merchant);

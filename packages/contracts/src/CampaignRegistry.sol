@@ -46,6 +46,7 @@ contract CampaignRegistry is ICampaignRegistry {
 
     function approveCreator(uint256 campaignId, address creator) external onlyMerchant(campaignId) {
         require(creator != address(0), "CampaignRegistry: zero creator");
+        require(creator != msg.sender, "CampaignRegistry: merchant cannot be own creator");
         _approvedCreators[campaignId][creator] = true;
         emit CreatorApproved(campaignId, creator);
     }
