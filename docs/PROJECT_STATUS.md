@@ -66,3 +66,9 @@ Verified against the **real** `apps/api` booted locally with throwaway keys: `/d
 Gasless checkout is still NOT demonstrated.
 ## Backend foundation additions (Member 2)
 Done and tested locally: relay-outcome tracking + chain reconciler (`GET /relay/:orderId`), attribution-link click tracker + stats + `demo:fake-clicks` script (ran 500 clicks against a live local server), automatic release keeper (queue + chain-time checks + no double sends), Arkiv live checks for sorting/pagination (9/9 on Rabdi), API Dockerfile (built, run, healthy), ESLint (clean), CI workflow (YAML-validated only, not yet run on GitHub). 70 API tests + 26 arkiv + 5 sdk-server + 2 shared. **Still unverified live:** the keeper, reconciler and click stats have never run against a deployed router; they depend on the Whitechain deployment.
+
+## Backend update (Member 2): CORS, discovery timeout, demo seed
+- `CORS_ORIGINS` (comma-separated allowlist, `*` allowed; empty = no CORS headers). Preflight answered with 204. Tested.
+- `DISCOVERY_TIMEOUT_MS` (default 15000): `/discovery/*` and `/creators/*` return 504 `UPSTREAM_TIMEOUT` instead of hanging when Arkiv stalls. Tested with a never-resolving fake.
+- `pnpm --filter @numa/arkiv seed:demo [-- --yes]`: dry run by default. Seeded Rabdi with 4 campaigns (ids 7001-7004), 4 creator profiles and 4 offers, all prefixed `[DEMO]`. Idempotent. These campaign ids do not exist on-chain, so they show as not merchant-verified, and there are no conversions or scores: no sale is faked.
+- Repo hygiene found after merging the frontend: `pnpm-lock.yaml` on `main` had a duplicated key (broke `--frozen-lockfile`, so CI); regenerated. ESLint: removed a reference to an unregistered react-hooks rule and downgraded unused-vars to warnings under `apps/web/src` (not-yet-routed screens). Two ADRs are numbered 0005 (web SPA vs OrderCommitment): one needs renumbering.
