@@ -132,6 +132,15 @@ deployed (currently empty).
 - All payout arithmetic is integer-only, rounds down, and is covered by a fuzz test
   (`testFuzz_payOrder_splitInvariant`, 512 runs) asserting `merchantNet + commission + fee ==
   gross` for arbitrary gross/commissionBps/feeBps within their valid ranges.
+- Constructor validates `usdt_`/`registry_` are deployed contracts (`code.length > 0`), not just
+  non-zero addresses, and caps `refundWindow_` at `MAX_REFUND_WINDOW` (365 days) — catches the
+  cheapest deployment-time mistakes (EOA/wrong-chain address, fat-fingered refund window) before
+  any funds are ever at risk. See `docs/DECISIONS/0006-pre-deployment-audit-hardening.md`.
+- `foundry.toml` pins `evm_version = "prague"`, matching Whitechain's documented requirement for
+  both Sepolia and Mainnet — avoids a compiler-target/verification mismatch at deploy time.
+- `CampaignRegistry.approveCreator` rejects a merchant approving themselves as their own creator
+  (`creator == msg.sender`), closing a self-dealing path to manufacture fake commission-bearing
+  conversions. See `docs/DECISIONS/0006-pre-deployment-audit-hardening.md`.
 
 ## Invariants
 
@@ -162,9 +171,10 @@ contracts are revisited.
 - The campaign's `payoutSigner` is trusted to sign only legitimate orders on the merchant's
   behalf — a malicious or compromised payout signer can authorize arbitrary settlements for that
   campaign (bounded by the campaign's own `commissionBps` and the creator-approval/settleability
-  checks). Merchant collusion (e.g., a merchant self-purchasing through an approved creator to
-  manufacture fake conversions) is out of scope for the contracts — see `README.md` → Known
-  limitations.
+  checks). A merchant can no longer approve themselves directly as their own creator
+  (`docs/DECISIONS/0006-pre-deployment-audit-hardening.md`), but collusion via a *different*,
+  independently-approved creator who kicks back the commission remains out of scope for the
+  contracts — see `README.md` → Known limitations.
 - The USDT token is assumed to behave as a standard, non-hook, non-rebasing ERC-20 with a correct
   EIP-3009 implementation, as independently verified against Whitechain testnet USDT in
   `docs/WHITECHAIN.md`. The token's own proxy admin could in principle change its implementation;
@@ -194,7 +204,7 @@ pnpm contracts:build
 pnpm contracts:test
 ```
 
-49 tests across `test/CampaignRegistry.t.sol` and `test/NumaRouter.t.sol`: unit tests for every
+55 tests across `test/CampaignRegistry.t.sol` and `test/NumaRouter.t.sol`: unit tests for every
 access-control and validation branch, a fuzz test for the payout-split invariant, fuzz tests for
 commission bounds, and 8 tests covering the `OrderCommitment` nonce binding (see
 `docs/DECISIONS/0005-order-commitment-nonce-binding.md`) — including direct reproductions of the
@@ -205,6 +215,10 @@ digest, and a fixed cross-language test vector
 digest for independent verification against a matching TypeScript test. `test/mocks/MockUSDT.sol`
 is a minimal EIP-3009 token mirroring the behavior verified against the real Whitechain testnet
 USDT in `docs/WHITECHAIN.md` (6 decimals, `receiveWithAuthorization` requires `msg.sender == to`).
+5 of the 54 tests cover the constructor-validation hardening from the pre-deployment audit
+(`test_constructor_revertsOnEOAUsdt`, `test_constructor_revertsOnEOARegistry`,
+`test_constructor_revertsOnRefundWindowTooLong`, `test_constructor_allowsExactlyMaxRefundWindow`,
+`test_constructor_allowsZeroRefundWindow`) — see `docs/DECISIONS/0006-pre-deployment-audit-hardening.md`.
 
 ## Deployment
 
