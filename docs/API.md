@@ -11,7 +11,7 @@
 
 `POST /relay` body: `{ order, merchantSig, buyer, auth:{validAfter,validBefore,v,r,s} }`
 → `{ status:"settled", txHash, blockNumber }` or `{ error: CODE, message }`.
-Codes: ORDER_EXPIRED, BAD_AUTH_WINDOW, BAD_SELF_PURCHASE, BAD_MERCHANT_SIG, DUPLICATE (409), GAS_PRICE_TOO_HIGH, DAILY_CAP_EXCEEDED, ADDRESS_LIMIT_EXCEEDED, INSUFFICIENT_RELAYER_BALANCE, SIMULATION_FAILED, TX_REVERTED, TX_TIMEOUT (422).
+Codes: ORDER_EXPIRED, BAD_AUTH_WINDOW, BAD_SELF_PURCHASE, BAD_MERCHANT_SIG, BAD_BUYER_AUTH, DUPLICATE (409), GAS_PRICE_TOO_HIGH, DAILY_CAP_EXCEEDED, ADDRESS_LIMIT_EXCEEDED, INSUFFICIENT_RELAYER_BALANCE, SIMULATION_FAILED, TX_REVERTED, TX_TIMEOUT (422).
 
 ## Arkiv-backed (enabled only when `ARKIV_WRITER_PRIVATE_KEY` is set)
 | GET | `/creators/:address/reputation` | Reads the creator's conversions from Arkiv (owned by the Numa writer), keeps only those verified against the router's `OrderSettled` event, returns `{ verifiedConversions, distinctPayers, grossSettled, commissionEarned, score|null, label, rejected[] }` (amounts as decimal strings). |

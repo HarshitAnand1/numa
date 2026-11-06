@@ -5,6 +5,7 @@
 | Relayer abused for arbitrary calls | Fixed target + function; request cannot pick contract/calldata | built |
 | Relayer drained via gas | gas price ceiling, daily cap, per-address limit, rate limit, simulate-first | built (in-memory limits) |
 | Duplicate/replayed orders | relayer claim by orderId; router single-use orderId; EIP-3009 nonce bound to digest+creator | relayer built; router planned |
+| Relayer submitting a mismatched/forged buyer authorization | recovered EIP-3009 signer must equal `buyer` for this exact order (amount, router, derived nonce) | built (mocked chain) |
 | Front-running the buyer's authorization | `receiveWithAuthorization` requires caller == recipient (router) | token-verified, flow untested |
 | Forged orders | EIP-712 merchant signature checked against campaign payout signer on-chain | planned |
 | Fake conversions on Arkiv | conversion entities trusted only if owned by Numa writer **and** matching `OrderSettled` | planned |
