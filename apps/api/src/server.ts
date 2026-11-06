@@ -7,14 +7,13 @@ import { loadEnv, type Env } from "./config/env.js";
 import { OrderSigner } from "@numa/sdk-server";
 import { Relayer, RelayError } from "./services/relayer.js";
 import { MemoryRelayStore } from "./services/store.js";
-import { isAddress } from "viem";
 import pg from "pg";
 import { migrate } from "./db/migrate.js";
 import { PgCursorStore, PgRelayStore } from "./db/pgStore.js";
 import { createArkivReader, createArkivWriter } from "@numa/arkiv";
 import { arkivConversionSink } from "./integrations/arkivSink.js";
 import { Indexer, MemoryCursor } from "./services/indexer.js";
-import { creatorReputation } from "./services/reputationService.js";
+import { registerDiscoveryRoutes } from "./routes/discovery.js";
 
 export function buildServer(env: Env) {
   const app = Fastify({ logger: { redact: ["req.headers.authorization"] } });
@@ -89,12 +88,7 @@ export function buildServer(env: Env) {
     });
     app.addHook("onClose", async () => { if (timer) clearInterval(timer); });
 
-    app.get("/creators/:address/reputation", async (req, reply) => {
-      const { address } = req.params as { address: string };
-      if (!isAddress(address)) return reply.code(400).send({ error: "invalid address" });
-      const { reputation: r, rejected } = await creatorReputation({ arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address }, address);
-      return { ...r, grossSettled: r.grossSettled.toString(), commissionEarned: r.commissionEarned.toString(), rejected };
-    });
+    registerDiscoveryRoutes(app, { arkiv: reader, pub, router: env.NUMA_ROUTER_ADDRESS, writer: writerAccount.address, ...(env.CAMPAIGN_REGISTRY_ADDRESS && { registry: env.CAMPAIGN_REGISTRY_ADDRESS }), cache: new Map() });
   }
   return app;
 }
