@@ -319,6 +319,158 @@ function Cursor() {
 }
 
 /**
+ * Hero physics. Bots flock toward the pointer and orbit it (they love a click that
+ * pays nothing); a click scatters them and drops a red $0.00. The headline letters
+ * lean away from the pointer, background layers shift with depth, and the marquees
+ * skew with scroll speed. rAF loop, transform/translate only; off for reduced motion.
+ */
+function useHeroFX(ready: boolean) {
+  useEffect(() => {
+    const hero = document.querySelector<HTMLElement>(".hero");
+    if (!hero || reducedMotion()) return;
+    const swarm = hero.querySelector<HTMLElement>(".cursor-swarm");
+    const bots = Array.from(hero.querySelectorAll<HTMLElement>(".cursor-swarm > span"));
+    const letters = Array.from(hero.querySelectorAll<HTMLElement>("h1 .ch"));
+    const h1 = hero.querySelector<HTMLElement>("h1");
+    const marquees = document.querySelector<HTMLElement>(".marquees");
+    let W = hero.clientWidth;
+    let H = hero.clientHeight;
+    const st = bots.map(() => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 1.6,
+      vy: (Math.random() - 0.5) * 1.6,
+    }));
+    const p = { x: 0, y: 0, active: false, mx: 0, my: 0, sx: 0, sy: 0 };
+    let visible = true;
+    let lastY = window.scrollY;
+    let vel = 0;
+    let raf = 0;
+    let settledTimer = 0;
+    if (ready) settledTimer = window.setTimeout(() => h1?.classList.add("letters-free"), 2300);
+
+    const onMove = (e: PointerEvent) => {
+      const r = hero.getBoundingClientRect();
+      p.x = e.clientX - r.left;
+      p.y = e.clientY - r.top;
+      p.active = true;
+      p.mx = (p.x / W - 0.5) * 2;
+      p.my = (p.y / H - 0.5) * 2;
+      if (!h1?.classList.contains("letters-free")) return;
+      letters.forEach((el) => {
+        const b = el.getBoundingClientRect();
+        const dx = b.left + b.width / 2 - e.clientX;
+        const dy = b.top + b.height / 2 - e.clientY;
+        const d = Math.hypot(dx, dy) || 1;
+        const k = Math.max(0, 1 - d / 190);
+        el.style.translate = `${((dx / d) * k * 26).toFixed(1)}px ${((dy / d) * k * 18).toFixed(1)}px`;
+        el.style.rotate = `${(k * (dx > 0 ? 7 : -7)).toFixed(1)}deg`;
+      });
+    };
+    const onLeave = () => {
+      p.active = false;
+      p.mx = 0;
+      p.my = 0;
+      letters.forEach((el) => {
+        el.style.translate = "";
+        el.style.rotate = "";
+      });
+    };
+    const onDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest("button,a,summary")) return;
+      const r = hero.getBoundingClientRect();
+      const cx = e.clientX - r.left;
+      const cy = e.clientY - r.top;
+      st.forEach((s) => {
+        const dx = s.x - cx;
+        const dy = s.y - cy;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d < 380) {
+          const f = (1 - d / 380) * 14;
+          s.vx += (dx / d) * f;
+          s.vy += (dy / d) * f;
+        }
+      });
+      const z = document.createElement("span");
+      z.className = "pop-zero";
+      z.textContent = "$0.00";
+      z.style.left = `${cx}px`;
+      z.style.top = `${cy}px`;
+      swarm?.appendChild(z);
+      window.setTimeout(() => z.remove(), 1000);
+    };
+    const onResize = () => {
+      W = hero.clientWidth;
+      H = hero.clientHeight;
+    };
+    const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting), { threshold: 0 });
+    io.observe(hero);
+    hero.addEventListener("pointermove", onMove);
+    hero.addEventListener("pointerleave", onLeave);
+    hero.addEventListener("pointerdown", onDown);
+    window.addEventListener("resize", onResize);
+
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      // scroll velocity -> marquee skew (always, cheap)
+      const y = window.scrollY;
+      vel += (y - lastY - vel) * 0.14;
+      lastY = y;
+      marquees?.style.setProperty("--vel", Math.max(-10, Math.min(10, vel * 0.5)).toFixed(2));
+      if (!visible) return;
+      p.sx += (p.mx - p.sx) * 0.06;
+      p.sy += (p.my - p.sy) * 0.06;
+      hero.style.setProperty("--mx", p.sx.toFixed(3));
+      hero.style.setProperty("--my", p.sy.toFixed(3));
+      for (let i = 0; i < bots.length; i++) {
+        const s = st[i];
+        s.vx += (Math.random() - 0.5) * 0.12;
+        s.vy += (Math.random() - 0.5) * 0.12;
+        if (p.active) {
+          const dx = p.x - s.x;
+          const dy = p.y - s.y;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d > 150) {
+            s.vx += (dx / d) * 0.05;
+            s.vy += (dy / d) * 0.05;
+          } else {
+            // orbit: swirl around the pointer, never touch it
+            s.vx += (-dy / d) * 0.06 - (dx / d) * 0.03;
+            s.vy += (dx / d) * 0.06 - (dy / d) * 0.03;
+          }
+        }
+        s.vx *= 0.975;
+        s.vy *= 0.975;
+        const sp = Math.hypot(s.vx, s.vy);
+        if (sp > 4.2) {
+          s.vx = (s.vx / sp) * 4.2;
+          s.vy = (s.vy / sp) * 4.2;
+        }
+        s.x += s.vx;
+        s.y += s.vy;
+        if (s.x < -30) s.x = W + 30;
+        if (s.x > W + 30) s.x = -30;
+        if (s.y < -30) s.y = H + 30;
+        if (s.y > H + 30) s.y = -30;
+        const rot = (Math.atan2(s.vy, s.vx) * 180) / Math.PI + 135;
+        bots[i].style.transform = `translate3d(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px, 0) rotate(${rot.toFixed(0)}deg)`;
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(settledTimer);
+      io.disconnect();
+      hero.removeEventListener("pointermove", onMove);
+      hero.removeEventListener("pointerleave", onLeave);
+      hero.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("resize", onResize);
+      marquees?.style.removeProperty("--vel");
+    };
+  }, [ready]);
+}
+
+/**
  * Scroll choreography for whatever view is mounted:
  *  - direct children of each main > section reveal with a stagger,
  *  - [data-scrub] elements get --p (0..1) as they cross the viewport,
@@ -621,6 +773,7 @@ function SplitCalculator({ compact = false }: { compact?: boolean }) {
 }
 
 function Home({ setView, ready }: { setView: (v: View) => void; ready: boolean }) {
+  useHeroFX(ready);
   return (
     <main>
       <section className="hero" data-scrub="out">
@@ -629,18 +782,7 @@ function Home({ setView, ready }: { setView: (v: View) => void; ready: boolean }
         </div>
         <div className="cursor-swarm" aria-hidden="true">
           {Array.from({ length: 26 }, (_, i) => (
-            <span
-              key={i}
-              style={
-                {
-                  "--i": i,
-                  left: `${(i * 37 + 9) % 94}%`,
-                  top: `${12 + ((i * 53) % 72)}%`,
-                } as React.CSSProperties
-              }
-            >
-              ↖
-            </span>
+            <span key={i}>↖</span>
           ))}
         </div>
         <div className="hero-meta">
