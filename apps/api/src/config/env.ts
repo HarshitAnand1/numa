@@ -33,6 +33,10 @@ const schema = z.object({
   CLICK_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(3000),
   /** Mixed into click visitor hashes; set any random string in production. */
   CLICK_VISITOR_SECRET: z.string().default("dev-only-change-me"),
+  /** Comma-separated allowed browser origins for CORS (e.g. https://numa.app). "*" allows any. Empty = no CORS headers. */
+  CORS_ORIGINS: z.string().default(""),
+  /** Max ms for a discovery request before it returns 504 instead of hanging on Arkiv. */
+  DISCOVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   ORDER_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 });
 export type Env = z.infer<typeof schema>;
