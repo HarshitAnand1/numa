@@ -1,0 +1,63 @@
+/* Live / demo / syncing label shown on every screen that reads from the API. */
+.data-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  font: 600 10px/1.2 "JetBrains Mono";
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.data-badge i {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.data-badge.live {
+  color: var(--green);
+}
+.data-badge.demo {
+  color: #ffb800;
+}
+.data-badge.loading {
+  color: var(--grey);
+}
+.data-badge.loading i {
+  animation: pulse 1.2s infinite;
+}
+.empty.small {
+  min-height: 0;
+  padding: 36px 0;
+}
+.rejected-list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  font: 11px/1.5 "JetBrains Mono";
+  color: var(--grey);
+}
+.rejected-list li {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.rejected-list code {
+  color: var(--bone);
+}
+.endorsements .muted {
+  color: var(--grey);
+}
+
+/* long creator names (or bare addresses) must not run into the score card */
+.creator-id h1.long {
+  font-size: clamp(44px, 6.2vw, 92px);
+}
+
+/* addresses in podium headings keep their lowercase 0x */
+.podium h2.addr {
+  text-transform: none;
+}
