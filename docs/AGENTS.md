@@ -13,7 +13,9 @@ A creator and a merchant can each switch on an agent that negotiates the commiss
 | Decision engine | `apps/api/src/agents/engine.ts` | Pure function. Guardrails are enforced here, not in the model. |
 | Note drafter | `apps/api/src/agents/llm.ts` | Optional Claude call, template fallback. Output is text only. |
 | Runner | `apps/api/src/agents/runner.ts` | Polls Arkiv, verifies, decides, publishes. Idempotent per (thread, seq). |
+| Feed + status | `GET /agents/threads?principal&role`, `GET /agents/binding?principal&role` | What the UI needs: my threads, and whether my agent is connected. |
 | Deal ticket | `GET /agents/deals` | What the merchant must sign on-chain. |
+| Signed-text builder | `policyAuthMessage` in `@numa/shared` | One copy, used by the browser and the API. |
 
 ## Negotiation flow
 ```

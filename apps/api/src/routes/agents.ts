@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { encodeFunctionData, isAddress, isHex, type Address, type Hex, type PublicClient } from "viem";
 import { campaignRegistryAbi, CampaignRegistryAbi } from "@numa/shared";
-import { listCampaigns, listLiveOffers, type ArkivReader } from "@numa/arkiv";
-import { loadThread } from "../agents/runner.js";
+import { listAgentBindings, listCampaigns, listLiveOffers, type ArkivReader } from "@numa/arkiv";
+import { loadThread, type Thread } from "../agents/runner.js";
 import { parsePolicy, verifyPolicyAuth, type Role } from "../agents/policy.js";
 import type { PolicyStore } from "../agents/store.js";
 
@@ -52,6 +52,57 @@ export function registerAgentRoutes(app: FastifyInstance, d: AgentRouteDeps) {
     if (!b?.principal || !isAddress(b.principal) || !role || !isHex(b.signature) || typeof b.issuedAt !== "number") return reply.code(400).send({ error: "BAD_REQUEST" });
     if (!(await verifyPolicyAuth({ action: "read", principal: b.principal, role, issuedAt: b.issuedAt, signature: b.signature as Hex, now: now() }))) return reply.code(401).send({ error: "UNAUTHORIZED" });
     return (await d.store.get(b.principal, role)) ?? reply.code(404).send({ error: "NOT_FOUND" });
+  });
+
+  const summary = (t: Thread, campaignName: string | undefined) => {
+    const last = t.verified.filter((m) => m.verifiedOwner).at(-1);
+    return {
+      offerKey: t.offerKey, campaignId: t.campaignId, ...(campaignName && { campaignName }), creator: t.creator, merchant: t.merchant,
+      offerAskBps: t.offerAskBps, state: t.state.kind, ...(t.state.kind === "deal" && { agreedBps: t.state.bps }), round: t.state.seq,
+      messageCount: t.messages.length, ignoredMessages: t.verified.length - t.messages.length,
+      ...(last && { last: { from: last.from, action: last.action, bps: last.bps, note: last.note, seq: last.seq } }),
+    };
+  };
+
+  /**
+   * "My threads": every live offer the principal is a party to, with its verified negotiation state. Public data only (Arkiv is public),
+   * so no signature is needed. Creator = offers they own; merchant = offers on campaigns whose on-chain merchant is the principal.
+   */
+  app.get("/agents/threads", async (req, reply) => {
+    const q = req.query as { principal?: string; role?: string; limit?: string };
+    const role = roleOf(q.role);
+    if (!q.principal || !isAddress(q.principal) || !role) return reply.code(400).send({ error: "BAD_REQUEST", message: "principal address and role=creator|merchant required" });
+    const limit = Math.min(Math.max(Number(q.limit) || 25, 1), 50);
+    const me = q.principal.toLowerCase();
+    const [offers, campaigns] = await Promise.all([listLiveOffers(d.arkiv), listCampaigns(d.arkiv, { limit: 100 }, now())]);
+    const byId = new Map(campaigns.map((c) => [c.campaignId.toString(), c]));
+    const cache = new Map();
+    const out: ReturnType<typeof summary>[] = [];
+    for (const offer of offers) {
+      if (out.length >= limit) break;
+      if (role === "creator" && offer.creator.toLowerCase() !== me) continue;
+      const camp = byId.get(offer.campaignId.toString());
+      if (!camp) continue;
+      if (role === "merchant" && (await merchantOf(offer.campaignId))?.toLowerCase() !== me) continue;
+      const t = await loadThread({ arkiv: d.arkiv, merchantOf }, offer, { commissionBps: Number(camp.commissionBps), category: camp.category }, cache);
+      if (t) out.push(summary(t, camp.name));
+    }
+    out.sort((a, b) => b.round - a.round);
+    return ser(out);
+  });
+
+  /** Is this principal's agent connected? True when a live numa.agent entity owned by the principal names the API's agent wallet. */
+  app.get("/agents/binding", async (req, reply) => {
+    const q = req.query as { principal?: string; role?: string };
+    const role = roleOf(q.role);
+    if (!q.principal || !isAddress(q.principal) || !role) return reply.code(400).send({ error: "BAD_REQUEST", message: "principal address and role=creator|merchant required" });
+    const bindings = await listAgentBindings(d.arkiv, q.principal, role);
+    const agent = d.agentAddress?.toLowerCase();
+    return ser({
+      enabled: !!d.agentAddress, agentAddress: d.agentAddress ?? null, principal: q.principal, role,
+      bound: !!agent && bindings.some((b) => b.agent.toLowerCase() === agent),
+      bindings: bindings.map((b) => ({ agent: b.agent, entityKey: b.entityKey })),
+    });
   });
 
   /** Public, verified negotiation thread for one offer (everything here is already public on Arkiv). */
