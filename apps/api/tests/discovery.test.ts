@@ -16,8 +16,8 @@ function settled(orderId: Hex, over: { merchant?: `0x${string}`; creator?: `0x${
   const item = getAbiItem({ abi: numaRouterAbi, name: "OrderSettled" });
   return {
     address: router, blockNumber: 10n, transactionHash: tx(1), logIndex: 0, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false,
-    topics: encodeEventTopics({ abi: [item], eventName: "OrderSettled", args: { orderId, campaignId: over.campaignId ?? 7n, creator: over.creator ?? creator } }),
-    data: encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [over.merchant ?? merchant, buyer(9), 100_000_000n, 89_500_000n, 10_000_000n, 500_000n]),
+    topics: encodeEventTopics({ abi: [item], eventName: "OrderSettled", args: { orderId, campaignId: over.campaignId ?? 7n, merchant: over.merchant ?? merchant } }),
+    data: encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [over.creator ?? creator, buyer(9), 100_000_000n, 89_500_000n, 10_000_000n, 500_000n]),
   };
 }
 const pubWith = (logsByTx: Record<string, unknown[]>) => ({
