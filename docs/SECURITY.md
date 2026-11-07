@@ -15,7 +15,7 @@
 | Fake links, decisions, invites, campaigns on Arkiv (anyone can write any entity) | readers filter by expected owner (`ownedBy`); campaign/invite ownership is compared with `CampaignRegistry.getCampaign(id).merchant`; unknown is reported as `null`, never `true` | built (registry untested live) |
 | Fake endorsements or smearing | author must be the order's merchant in `OrderSettled`; one per order | built |
 | Spoofed negotiation messages or a hijacked agent | a message counts only if written by the principal or by an agent named in a live `numa.agent` entity owned by that principal; accepts must name the other side's last rate | built (live Arkiv checked) |
-| Agent over-concession or prompt injection | a rules engine enforces private guardrails and the campaign's own cap; the LLM only phrases a note, its output is dropped if it states a different figure, and counterparty text is never fed to the engine | built (real LLM untested) |
+| Agent over-concession or prompt injection | a rules engine enforces private guardrails and the campaign's own cap; the LLM (Gemini or Claude) only phrases a note, its output is dropped if it states a different figure, and counterparty text is never fed to the engine; the Gemini key travels only in a header, never the URL | built (real LLM untested) |
 | Reading or changing someone's agent policy | every read and write needs a fresh EIP-191 signature from the principal (5 minute window, action bound into the message) | built |
 | Reentrancy and accounting bugs | CEI, `ReentrancyGuard`, `SafeERC20`, fuzzed invariants (held + released + clawed = commission) | built (local tests) |
 | Key leakage | keys only in env or keystore; never in the repo or logs; `.env` is gitignored | process |
