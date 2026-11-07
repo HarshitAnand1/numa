@@ -11,6 +11,12 @@ export type DeployedAddresses = {
 
 export const USDT_ADDRESS: `0x${string}` = "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7";
 
-/// Nothing is deployed yet — see docs/PROJECT_STATUS.md. Populate after the first testnet
-/// deployment and keep this in sync with .env.example's CAMPAIGN_REGISTRY_ADDRESS / NUMA_ROUTER_ADDRESS.
-export const DEPLOYED_ADDRESSES: Partial<Record<number, DeployedAddresses>> = {};
+/// Whitechain Sepolia deployment reported by Member 1 (explorer-verified, router: 0.5% fee, 60 s refund window).
+/// Keep in sync with .env.example's CAMPAIGN_REGISTRY_ADDRESS / NUMA_ROUTER_ADDRESS.
+export const DEPLOYED_ADDRESSES: Partial<Record<number, DeployedAddresses>> = {
+  [WHITECHAIN_SEPOLIA_CHAIN_ID]: {
+    campaignRegistry: "0xD924385D22626dB2894D25b5f12253BC36148425",
+    numaRouter: "0x51fCf8F50ABB17a0d4D70BA14B4F6394A583c2Fc",
+    usdt: USDT_ADDRESS,
+  },
+};
