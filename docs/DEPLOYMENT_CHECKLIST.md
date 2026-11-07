@@ -4,6 +4,10 @@ Status: prepared, not yet executed. Nothing in this document has been run agains
 See `docs/SMART_CONTRACTS.md` → Deployment and `docs/DECISIONS/0006-pre-deployment-audit-hardening.md`
 for the contract-level fixes this checklist assumes are already in place.
 
+## Before you start: rehearse and preflight
+- `pnpm --filter @numa/api rehearsal` runs the whole flow on a fork of the chain first (see `DEVELOPMENT.md`). It passed 11/11 on 2026-11-07 and found two real bugs (an out-of-gas relay and blank-env handling) that are now fixed.
+- After deploying and filling `.env`, run `pnpm --filter @numa/api preflight -- --campaign <id>` and fix any FAIL before starting the API.
+
 ## 0. Preconditions
 
 - [ ] `forge build` and `forge test` both pass (55/55 as of this writing; re-run before deploying

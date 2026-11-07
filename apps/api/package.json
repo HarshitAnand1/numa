@@ -8,7 +8,9 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "demo:fake-clicks": "tsx scripts/fake-clicks.ts"
+    "demo:fake-clicks": "tsx scripts/fake-clicks.ts",
+    "rehearsal": "tsx scripts/rehearsal.ts",
+    "preflight": "node --env-file=../../.env --import tsx scripts/preflight.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
@@ -26,6 +28,7 @@
     "@types/pg": "^8.23.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "@numa/sdk-react": "workspace:*"
   }
 }
