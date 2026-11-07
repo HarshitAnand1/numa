@@ -19,7 +19,8 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { USDT_ADDRESS, whitechainSepolia } from "@numa/shared";
 import { CampaignRegistryAbi, NumaRouterAbi } from "@numa/shared";
-import { runCheckout } from "@numa/sdk-react/core";
+// Imported by path (not as a dependency) so the API image does not pull in the browser SDK's dependencies.
+import { runCheckout } from "../../../packages/sdk-react/src/core.js";
 import { buildServer } from "../src/server.js";
 import { loadEnv } from "../src/config/env.js";
 import { runPreflight, summarize } from "../src/preflight.js";

@@ -18,7 +18,7 @@ _Last reviewed: 2026-11-07. Everything marked "verified" was run; everything els
 | 7 End-to-end | Not started (blocked on deployment) |
 
 ## Test counts (2026-11-07, local and CI)
-Foundry 55 · `apps/api` 103 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 69 · `packages/sdk-react` 41 · `packages/sdk-server` 6 · `packages/shared` 6.
+Foundry 55 · `apps/api` 106 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 69 · `packages/sdk-react` 41 · `packages/sdk-server` 6 · `packages/shared` 6.
 
 ## Blockers
 0. **Update (2026-11-07):** Member 1 reported `CampaignRegistry` `0xD924385D22626dB2894D25b5f12253BC36148425` and `NumaRouter` `0x51fCf8F50ABB17a0d4D70BA14B4F6394A583c2Fc` on Whitechain Sepolia (USDT `0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7`). Member 3 confirmed all three addresses have contract code on `rpc.testnet.whitechain.io`, and uses them locally via `VITE_*` env (`.env.local`, untracked). `packages/shared/src/addresses.ts` is Member 1's file and is not yet filled in. **No real checkout, campaign creation or approval has been run against these contracts yet.** `@numa/sdk-react/core` (`runCheckout`, Member 2's rehearsal) is kept alongside the Member 3 package.
@@ -51,8 +51,9 @@ The backend's pre-contract proposal differed from what Member 1 shipped. Fixed i
 - **Indexer + Arkiv:** mirrors `OrderSettled` into `numa.conversion`, idempotent by `orderId`; reputation counts only conversions verified against the event (`API.md`).
 - **Click tracker:** `/r/:code` counts clicks (hashed visitor) and `demo:fake-clicks` shows 500 clicks next to 0 verified sales (`DEMO.md`).
 - **Discovery:** campaigns, trending, creator search, leaderboard, creator card, recommendations, invites (`API.md`, `ARKIV.md`). Seeded with `[DEMO]` data on Rabdi via `seed:demo`; those campaign ids do not exist on-chain and show as unverified.
+- **Merchant review:** `GET /campaigns/:id/offers` (offers with creator profile, the merchant's verified decision and on-chain approval); tested with fakes, not run against live Arkiv data for this route.
 - **Receipts and export:** `GET /receipts/:orderId` and `GET /merchants/:address/orders` (JSON or accountant CSV), rebuilt from chain events; checked against on-chain balances in the rehearsal.
-- **Deploy tooling:** fork rehearsal and a read-only preflight (`DEVELOPMENT.md`).
+- **Deploy tooling:** fork rehearsal and a read-only preflight (`DEVELOPMENT.md`); a Render Blueprint (`render.yaml`) and runbook (`HOSTING.md`). **Nothing is hosted yet**; the Blueprint is not validated by Render, and the API image builds and boots locally (the Dockerfile was missing the `sdk-react` package and is fixed).
 - **Operational:** CORS allowlist (`CORS_ORIGINS`), discovery timeout (504 after `DISCOVERY_TIMEOUT_MS`), Postgres migrations (001-005), Dockerfile.
 - **Negotiation agents** (`AGENTS.md`, ADR 0008, **Proposed**): `numa.agent` and `numa.negotiation` entities, rules engine with private guardrails, signed policy API, verified threads, deal tickets, runner loop (off unless `AGENT_WALLET_PRIVATE_KEY` is set), optional Claude phrasing. Feed and status endpoints for the UI (`/agents/threads`, `/agents/binding`) and the shared signed-text builder (`@numa/shared`) are built. Not built: any UI, a live run against a registry.
 
