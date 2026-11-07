@@ -16,6 +16,7 @@
 | [`SDK.md`](SDK.md) | Merchant SDK (`sdk-server` built, `sdk-react` planned) |
 | [`SECURITY.md`](SECURITY.md) | Threat model and honest limitations |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Setup, scripts, database, Docker, CI |
+| [`HOSTING.md`](HOSTING.md) | Deploying the API and web apps on Render's free tier, with the caveats |
 | [`DEMO.md`](DEMO.md) | The 3-minute demo plan and its preconditions |
 | [`FIGMA_PROMPT.md`](FIGMA_PROMPT.md) | The prompt behind the frontend design |
 | [`REPOSITORY_AUDIT.md`](REPOSITORY_AUDIT.md) | Day-one snapshot of the repo (historical) |
