@@ -25,11 +25,14 @@ const settledLog = () => {
 /** Fake of the SDK query chain keyed by schema name; returns rows configured per schema. */
 function fakeArkiv(rows: Record<string, unknown[]>) {
   let schema = "";
+  let owner: string | undefined;
   const b: Record<string, unknown> = {};
-  b.select = () => b;
+  b.select = () => { owner = undefined; return b; };
   b.from = (s: { name?: string }) => { schema = s.name ?? ""; return b; };
-  for (const m of ["where", "ownedBy", "limit", "offset", "orderBy"]) b[m] = () => b;
-  b.fetch = async () => ({ entities: rows[schema] ?? [], skipped: 0 });
+  for (const m of ["where", "limit", "offset", "orderBy"]) b[m] = () => b;
+  // mirrors Arkiv's ownedBy: rows carrying an $owner are only returned for that owner
+  b.ownedBy = (o: string) => { owner = o.toLowerCase(); return b; };
+  b.fetch = async () => ({ entities: (rows[schema] ?? []).filter((e) => { const o = (e as { $owner?: string }).$owner; return owner === undefined || o === undefined || o.toLowerCase() === owner; }), skipped: 0 });
   return b as never;
 }
 const campaignRow = (id: bigint, owner: string, category = "devtools", bps = 800n) => ({
@@ -38,15 +41,40 @@ const campaignRow = (id: bigint, owner: string, category = "devtools", bps = 800
 });
 const conv = { $key: "0xv", creator: { value: creator }, merchant: { value: merchant }, campaignId: { value: 7n }, gross: { value: 100_000_000n }, commission: { value: 10_000_000n }, status: { value: "held" }, paidAt: { value: 1_700_000_000n }, txHash: { value: txHash }, orderId: { value: orderId } };
 
-function app(rows: Record<string, unknown[]>, opts: { registryMerchant?: string } = {}) {
+function app(rows: Record<string, unknown[]>, opts: { registryMerchant?: string; approved?: boolean } = {}) {
   const pub = {
     getTransactionReceipt: vi.fn().mockResolvedValue({ status: "success", logs: [settledLog()], blockNumber: 10n }),
-    readContract: vi.fn().mockResolvedValue({ merchant: opts.registryMerchant ?? merchant, payoutSigner: merchant, commissionBps: 800n, endsAt: 9_999_999_999n, paused: false, exists: true }),
+    readContract: vi.fn(async ({ functionName }: { functionName: string }) => functionName === "isCreatorApproved" ? (opts.approved ?? false) : { merchant: opts.registryMerchant ?? merchant, payoutSigner: merchant, commissionBps: 800n, endsAt: 9_999_999_999n, paused: false, exists: true }),
   } as never;
   const a = Fastify();
   registerDiscoveryRoutes(a, { arkiv: fakeArkiv(rows), pub, router, writer, registry, cache: new Map(), now: () => 1_000 });
   return a;
 }
+
+describe("GET /campaigns/:id/offers", () => {
+  const offer = (key: string, owner: string, ask = 900n) => ({ $key: key, $owner: owner, campaignId: { value: 7n }, channel: { value: "youtube" }, audience: { value: "devs" }, askBps: { value: ask }, expectedReach: { value: 5000n } });
+  const decision = (owner: string, offerKey: string, result: string) => ({ $key: `0xd${offerKey}`, $owner: owner, offerKey: { value: offerKey }, campaignId: { value: 7n }, result: { value: result }, approveTx: { value: "" } });
+  const profile = { $key: "0xp", $owner: creator, displayName: { value: "Ada" }, bio: { value: "b" }, niche: { value: "devtools" }, niches: { value: "" }, channel: { value: "youtube" }, handle: { value: "h" }, minAskBps: { value: 500n }, open: { value: true } };
+
+  it("lists offers with the creator's profile, the merchant's decision and the on-chain approval", async () => {
+    const a = app({ "numa.offer": [offer("0xo1", creator), offer("0xo2", stranger, 1500n)], "numa.profile": [profile], "numa.decision": [decision(merchant, "0xo1", "approved")] }, { approved: true });
+    const r = (await a.inject("/campaigns/7/offers")).json();
+    expect(r).toMatchObject({ campaignId: "7", merchant, merchantVerified: true, count: 2 });
+    const o1 = r.offers.find((o: { offerKey: string }) => o.offerKey === "0xo1");
+    expect(o1).toMatchObject({ creator, askBps: 900, expectedReach: "5000", profile: { displayName: "Ada" }, decision: "approved", approvedOnChain: true });
+    expect(r.offers.find((o: { offerKey: string }) => o.offerKey === "0xo2")).toMatchObject({ profile: null, decision: null });
+  });
+  it("ignores a 'decision' written by someone who is not the campaign's on-chain merchant", async () => {
+    const a = app({ "numa.offer": [offer("0xo1", creator)], "numa.decision": [decision(stranger, "0xo1", "approved")] });
+    const r = (await a.inject("/campaigns/7/offers")).json();
+    expect(r.offers[0].decision).toBeNull(); // the fake only returns decisions owned by the merchant, mirroring ownedBy
+  });
+  it("reports the on-chain approval as false when not approved, and rejects a bad id", async () => {
+    const a = app({ "numa.offer": [offer("0xo1", creator)] }, { approved: false });
+    expect((await a.inject("/campaigns/7/offers")).json().offers[0].approvedOnChain).toBe(false);
+    expect((await a.inject("/campaigns/abc/offers")).statusCode).toBe(400);
+  });
+});
 
 describe("discovery routes", () => {
   it("campaign discovery flags whether the Arkiv owner is the on-chain merchant", async () => {
