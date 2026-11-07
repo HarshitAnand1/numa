@@ -9,6 +9,6 @@ numa is built by three human developers. (AI assistance is a tool, not a contrib
 | 3 | _TBD_ | Frontend and product | `apps/web` |
 
 ## Handoffs
-- 1 → 2: contract ABIs and deployed addresses (`packages/shared`), and the `OrderSettled` / `OrderRefunded` / `CommissionReleased` events. **Waiting on the first Whitechain Sepolia deployment.**
+- 1 → 2: contract ABIs and deployed addresses (`packages/shared`), and the `OrderSettled` / `OrderRefunded` / `CommissionReleased` events. **Done: deployed to Whitechain Sepolia, addresses in `packages/shared/src/addresses.ts`.**
 - 2 → 3: HTTP contracts (`docs/API.md`), the Arkiv module (`packages/arkiv`), the order and relay flow (`docs/SDK.md`).
 - All: architecture, security review, end-to-end testing, demo.

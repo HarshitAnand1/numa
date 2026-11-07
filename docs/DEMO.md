@@ -13,7 +13,7 @@ Real transactions only. The refund window is shortened to 60 s and disclosed on 
 | 2:50 | Ledger close |
 
 ## Preconditions
-- [ ] Contracts deployed and verified; addresses in `packages/shared/src/addresses.ts` and `.env`
+- [x] Contracts deployed and verified; addresses in `packages/shared/src/addresses.ts` and `.env.example` (`WHITECHAIN.md`)
 - [ ] Relayer wallet funded with WBT; Arkiv writer funded with tGLM
 - [ ] `seed:demo` run so discovery screens are populated (its `[DEMO]` rows are labelled, and unverified on-chain)
 - [x] Checkout component built (`@numa/sdk-react`, `apps/demo-shop`); [ ] run it against the deployed stack with a real wallet that holds test USDT and zero WBT
