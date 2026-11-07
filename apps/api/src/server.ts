@@ -81,6 +81,8 @@ export function buildServer(env: Env) {
     return {
       order: Object.fromEntries(Object.entries(o.order).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v])),
       digest: o.digest, authNonce: o.authNonce, merchantSig: o.merchantSig, payoutSigner: o.payoutSigner,
+      // Same shape as @numa/sdk-server's OrderPayload, so the checkout works against this demo endpoint or a merchant's own.
+      router: env.NUMA_ROUTER_ADDRESS, chainId: env.WHITECHAIN_CHAIN_ID,
     };
   });
 
