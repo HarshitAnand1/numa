@@ -17,6 +17,7 @@ export type View =
   | "demo"
   | "verify"
   | "system"
+  | "agents"
   | "notFound";
 
 export interface Route {
@@ -41,6 +42,7 @@ const STATIC: Record<string, View> = {
   "/demo-shop": "demo",
   "/verify": "verify",
   "/system-states": "system",
+  "/agents": "agents",
 };
 
 /** Unknown or malformed paths are a 404, never silently the home page. */
@@ -54,7 +56,8 @@ export function parseRoute(pathname: string): Route {
     const [head, arg] = seg;
     if (head === "campaigns" && NUMERIC_ID.test(arg)) return { view: "campaignDetail", campaignId: arg };
     if (head === "creators" && ADDRESS.test(arg)) return { view: "creator", creator: arg.toLowerCase() };
-    if ((head === "pay" || head === "receipt") && arg) return { view: "checkout" };
+    // /checkout/:code is where the click tracker (GET /r/:code) redirects to
+    if ((head === "pay" || head === "receipt" || head === "checkout") && arg) return { view: "checkout" };
   }
   return { view: "notFound" };
 }
@@ -78,13 +81,15 @@ export function routeToPath(r: Route): string {
     case "merchant":
       return "/merchant";
     case "checkout":
-      return "/pay/demo";
+      return "/checkout/demo";
     case "demo":
       return "/demo-shop";
     case "verify":
       return "/verify";
     case "system":
       return "/system-states";
+    case "agents":
+      return "/agents";
     case "notFound":
       return "/404";
   }
@@ -103,6 +108,7 @@ const TITLES: Record<View, string> = {
   demo: "demo shop",
   verify: "verify a sale — numa",
   system: "system states — numa",
+  agents: "agents — numa",
   notFound: "404 — numa",
 };
 

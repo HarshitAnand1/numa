@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api, getJson } from "./client";
-import { addressUrl, ago, bpsToPercent, formatUsdt, shortAddress, timeLeft, txUrl } from "./format";
+import { addressUrl, ago, bpsToPercent, formatUsdt, salesToCsv, shortAddress, timeLeft, txUrl } from "./format";
 import { demoCampaigns, demoCreatorCard, demoLeaderboard, demoTrending } from "./mock";
 import { toCampaignView } from "./view";
 
@@ -141,5 +141,21 @@ describe("view adapters and demo fixtures", () => {
     expect(card.address).toMatch(/^0x[0-9a-f]{40}$/);
     expect(card.reputation.score).toBeGreaterThanOrEqual(0);
     expect(card.reputation.score).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("salesToCsv", () => {
+  const sale = { txHash: "0xabc", campaignId: "7", gross: "25000000", commission: "4500000", status: "held", paidAt: 1_800_000_000 };
+  it("writes a header and one row per sale, with exact 6-decimal amounts", () => {
+    const lines = salesToCsv([sale]).trimEnd().split("\n");
+    expect(lines[0]).toBe("txHash,campaignId,grossUsdt,commissionUsdt,status,paidAtUtc");
+    expect(lines[1]).toBe("0xabc,7,25.000000,4.500000,held,2027-01-15T08:00:00.000Z");
+  });
+  it("is just a header for no sales, and ends with a newline", () => {
+    expect(salesToCsv([])).toBe("txHash,campaignId,grossUsdt,commissionUsdt,status,paidAtUtc\n");
+  });
+  it("quotes fields that contain commas, quotes or newlines (no CSV injection of columns)", () => {
+    const csv = salesToCsv([{ ...sale, status: 'he said "hi", ok\nnext' }]);
+    expect(csv).toContain('"he said ""hi"", ok\nnext"');
   });
 });

@@ -1,0 +1,357 @@
+/* Agents: policy, binding, activity feed, deal tickets. */
+.ag-lede {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--grey);
+  font-size: 18px;
+  line-height: 1.55;
+}
+.ag-wrap {
+  display: grid;
+  gap: 22px;
+  padding: 0 4.45vw 90px;
+}
+.ag-roles {
+  display: flex;
+  gap: 8px;
+}
+.ag-roles button {
+  padding: 11px 18px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--grey);
+  font: 600 12px "JetBrains Mono";
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ag-roles button.on {
+  border-color: var(--green);
+  color: var(--green);
+}
+.ag-card {
+  padding: clamp(22px, 3vw, 38px);
+  border: 1px solid var(--line);
+  background: var(--charcoal);
+}
+.ag-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ag-kicker {
+  color: var(--green);
+  font: 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+}
+.ag-card h2 {
+  margin: 10px 0 0;
+  font: 900 clamp(26px, 3.2vw, 44px) / 1 "Unbounded";
+  letter-spacing: -0.06em;
+}
+.ag-card h3 {
+  margin: 0;
+  font: 700 16px "Inter Tight";
+}
+.ag-note {
+  max-width: 70ch;
+  margin: 18px 0;
+  color: var(--grey);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.ag-note b {
+  color: var(--bone);
+}
+.ag-fine {
+  margin: 14px 0 0;
+  color: var(--grey);
+  font: 11px / 1.5 "JetBrains Mono";
+}
+.ag-card a {
+  color: var(--green);
+}
+.ag-pill {
+  padding: 5px 10px;
+  border: 1px solid var(--grey);
+  color: var(--grey);
+  font: 600 10px "JetBrains Mono";
+  letter-spacing: 0.06em;
+}
+.ag-pill.ok {
+  border-color: var(--green);
+  color: var(--green);
+}
+.ag-gate p {
+  max-width: 54ch;
+  margin: 16px 0 22px;
+  color: var(--grey);
+  line-height: 1.5;
+}
+.ag-facts {
+  display: grid;
+  gap: 0;
+  margin: 0 0 20px;
+  border-top: 1px solid var(--line);
+}
+.ag-facts div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.ag-facts dt {
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+  text-transform: uppercase;
+}
+.ag-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ag-facts code,
+.ag-row code {
+  font: 12px "JetBrains Mono";
+}
+.ag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.ag-row small {
+  display: block;
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  text-transform: uppercase;
+}
+.ag-msg {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--grey);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.ag-msg.ok {
+  border-color: var(--green);
+}
+.ag-msg.err {
+  border-color: var(--red);
+}
+.ag-msg.info {
+  border-color: #ffb800;
+}
+
+/* policy form */
+.ag-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 12px "JetBrains Mono";
+  text-transform: uppercase;
+}
+.ag-toggle input {
+  accent-color: var(--green);
+  width: 18px;
+  height: 18px;
+}
+.ag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px 22px;
+}
+.ag-field {
+  display: grid;
+  gap: 7px;
+}
+.ag-field.wide {
+  grid-column: 1 / -1;
+}
+.ag-field > span {
+  color: var(--grey);
+  font: 600 10px "JetBrains Mono";
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ag-field > div {
+  position: relative;
+}
+.ag-field input {
+  width: 100%;
+  padding: 13px 38px 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--black);
+  color: var(--bone);
+  font: 600 18px "JetBrains Mono";
+}
+.ag-field input:focus {
+  border-color: var(--green);
+}
+.ag-field.bad input {
+  border-color: var(--red);
+}
+.ag-field > div i {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--grey);
+  font: normal 13px "JetBrains Mono";
+}
+.ag-field small {
+  color: var(--grey);
+  font: 11px / 1.4 "JetBrains Mono";
+}
+.ag-field.bad small {
+  color: var(--red);
+}
+.ag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.ag-card .hard-button:disabled,
+.ag-card .outline-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* feed */
+.ag-thread {
+  border-top: 1px solid var(--line);
+}
+.ag-thread-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  padding: 16px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+.ag-thread-head b {
+  display: block;
+}
+.ag-thread-head small {
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+}
+.ag-last {
+  color: var(--grey);
+  font: 12px "JetBrains Mono";
+}
+.ag-state {
+  padding: 5px 10px;
+  border: 1px solid currentColor;
+  font: 700 10px "JetBrains Mono";
+  letter-spacing: 0.06em;
+}
+.ag-state.open {
+  color: #ffb800;
+}
+.ag-state.deal {
+  color: var(--green);
+}
+.ag-state.rejected {
+  color: var(--red);
+}
+.ag-timeline {
+  margin: 0 0 18px;
+  padding: 0 0 0 18px;
+  border-left: 1px solid var(--line);
+  list-style: none;
+}
+.ag-timeline li {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 8px 0 8px 14px;
+  font-size: 14px;
+}
+.ag-timeline li::before {
+  content: "";
+  position: absolute;
+  left: -23px;
+  top: 14px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--grey);
+}
+.ag-timeline li.accept::before {
+  background: var(--green);
+}
+.ag-timeline li.reject::before {
+  background: var(--red);
+}
+.ag-timeline li.ignored {
+  color: var(--grey);
+}
+.ag-timeline li span {
+  color: var(--grey);
+  overflow-wrap: anywhere;
+}
+
+/* deals */
+.ag-deal {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+}
+.ag-deal ol {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding-left: 20px;
+}
+.ag-deal li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+}
+.ag-deal small {
+  color: var(--grey);
+  font: 11px "JetBrains Mono";
+}
+.ag-deal small.ok {
+  color: var(--green);
+}
+.ag-deal small.err {
+  width: 100%;
+  color: var(--red);
+}
+@media (max-width: 760px) {
+  .ag-thread-head {
+    grid-template-columns: 1fr auto;
+  }
+  .ag-last {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+
+.ag-card .outline-button {
+  border: 1px solid var(--bone);
+  background: none;
+  color: var(--bone);
+  box-shadow: none;
+}
+.ag-card .outline-button:hover:not(:disabled) {
+  border-color: var(--green);
+  color: var(--green);
+}
