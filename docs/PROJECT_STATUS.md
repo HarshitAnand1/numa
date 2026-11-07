@@ -18,7 +18,7 @@ _Last reviewed: 2026-11-07. Everything marked "verified" was run; everything els
 | 7 End-to-end | Not started (blocked on deployment) |
 
 ## Test counts (2026-11-07, local and CI)
-Foundry 55 · `packages/sdk-react` 11 · `apps/api` 103 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 28 · `packages/sdk-server` 6 · `packages/shared` 6.
+Foundry 55 · `packages/sdk-react` 11 · `apps/api` 106 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 28 · `packages/sdk-server` 6 · `packages/shared` 6.
 
 ## Blockers
 1. **Deployment** of `CampaignRegistry` and `NumaRouter` to Whitechain Sepolia needs a human with a funded Foundry keystore (Member 1). Then fill `packages/shared/src/addresses.ts` and `.env`.
@@ -50,6 +50,7 @@ The backend's pre-contract proposal differed from what Member 1 shipped. Fixed i
 - **Indexer + Arkiv:** mirrors `OrderSettled` into `numa.conversion`, idempotent by `orderId`; reputation counts only conversions verified against the event (`API.md`).
 - **Click tracker:** `/r/:code` counts clicks (hashed visitor) and `demo:fake-clicks` shows 500 clicks next to 0 verified sales (`DEMO.md`).
 - **Discovery:** campaigns, trending, creator search, leaderboard, creator card, recommendations, invites (`API.md`, `ARKIV.md`). Seeded with `[DEMO]` data on Rabdi via `seed:demo`; those campaign ids do not exist on-chain and show as unverified.
+- **Merchant review:** `GET /campaigns/:id/offers` (offers with creator profile, the merchant's verified decision and on-chain approval); tested with fakes, not run against live Arkiv data for this route.
 - **Receipts and export:** `GET /receipts/:orderId` and `GET /merchants/:address/orders` (JSON or accountant CSV), rebuilt from chain events; checked against on-chain balances in the rehearsal.
 - **Deploy tooling:** fork rehearsal and a read-only preflight (`DEVELOPMENT.md`).
 - **Operational:** CORS allowlist (`CORS_ORIGINS`), discovery timeout (504 after `DISCOVERY_TIMEOUT_MS`), Postgres migrations (001-005), Dockerfile.
