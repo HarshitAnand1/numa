@@ -112,3 +112,15 @@ export interface ApiInvite {
   message: string;
   verified: boolean | null;
 }
+
+/**
+ * `GET /links/:code/stats?creator&campaignId`. `settled` is null when the API can't verify sales
+ * (no Arkiv/chain access); when present it counts only chain-verified sales. Clicks never earn commission.
+ */
+export interface ApiLinkStats {
+  code: string;
+  clicks: number;
+  uniqueVisitors: number;
+  settled: { verifiedConversions: number; grossSettled: string; commissionEarned: string } | null;
+  note?: string;
+}
