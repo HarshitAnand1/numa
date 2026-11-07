@@ -17,6 +17,7 @@ Workstream branches: `feat/contracts` (Member 1), `feat/backend-relayer` and sho
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | all TypeScript packages (lint excludes contracts; use `forge fmt` there) |
 | `pnpm contracts:build` / `pnpm contracts:test` | Foundry build and tests |
 | `pnpm --filter @numa/web dev` | frontend dev server (proxies `/api` to `VITE_API_PROXY`, default `http://localhost:8787`) |
+| `pnpm --filter @numa/demo-shop dev` | the demo store (adds the checkout component), on :5174 |
 | `pnpm --filter @numa/api dev` | API with watch; needs a full `.env` |
 | `pnpm --filter @numa/api demo:fake-clicks -- --code X --n 500 --creator 0x.. --campaign N` | send real HTTP clicks to the click tracker (see `DEMO.md`) |
 | `pnpm --filter @numa/arkiv query:example` | read-only: live campaigns, open creators and offers on Rabdi (no key needed) |
