@@ -1,4 +1,4 @@
-import type { ApiCampaign, ApiCreatorCard, ApiLeaderboardRow, ApiTrending } from "./types";
+import type { ApiCampaign, ApiCreatorCard, ApiInvite, ApiLeaderboardRow, ApiRecommendation, ApiTrending } from "./types";
 
 /**
  * DEMO DATA. Only used when the API is unreachable or VITE_DATA_MODE=demo, and every screen
@@ -124,4 +124,19 @@ export function demoCreatorCard(address: string = DEMO_CREATOR, now = Math.floor
       endorsements: [{ txHash: `0x${"bad3".padEnd(64, "0")}`, reason: "author is not the order's merchant" }],
     },
   };
+}
+
+export function demoRecommendations(now?: number): ApiRecommendation[] {
+  const c = demoCampaigns(now);
+  return [
+    { campaign: c[0], primaryMatch: true },
+    { campaign: c[2], primaryMatch: false },
+  ];
+}
+
+export function demoInvites(): ApiInvite[] {
+  return [
+    { entityKey: "0xdemo-invite-1", merchant: MERCHANT_A, campaignId: "8", creator: DEMO_CREATOR, offeredBps: 1800, message: "your night-run edits are exactly the brief.", verified: true },
+    { entityKey: "0xdemo-invite-2", merchant: MERCHANT_B, campaignId: "110", creator: DEMO_CREATOR, offeredBps: 2400, message: "", verified: null },
+  ];
 }

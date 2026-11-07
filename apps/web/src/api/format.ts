@@ -53,3 +53,24 @@ export function ago(unix: number, now = Math.floor(Date.now() / 1000)): string {
   if (s < 172800) return "yesterday";
   return `${Math.floor(s / 86400)}d ago`;
 }
+
+/** CSV of verified sales for the creator's own records. Fields are quoted only when they need it. */
+export function salesToCsv(
+  sales: { txHash: string; campaignId: string; gross: string; commission: string; status: string; paidAt: number }[],
+): string {
+  const needsQuotes = /[",\n\r]/;
+  const cell = (v: string | number) => {
+    const s = String(v);
+    return needsQuotes.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ["txHash", "campaignId", "grossUsdt", "commissionUsdt", "status", "paidAtUtc"];
+  const rows = sales.map((x) => [
+    x.txHash,
+    x.campaignId,
+    formatUsdt(x.gross, 6),
+    formatUsdt(x.commission, 6),
+    x.status,
+    new Date(x.paidAt * 1000).toISOString(),
+  ]);
+  return [header, ...rows].map((r) => r.map(cell).join(",")).join("\n") + "\n";
+}

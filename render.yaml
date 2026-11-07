@@ -46,6 +46,8 @@ services:
     envVars:
       - { key: NODE_VERSION, value: "22" }
       - { key: VITE_API_URL, sync: false }                 # the API's public URL, e.g. https://numa-api.onrender.com
+      - { key: VITE_NUMA_ROUTER_ADDRESS, sync: false }     # deployed router (falls back to @numa/shared DEPLOYED_ADDRESSES)
+      - { key: VITE_CAMPAIGN_REGISTRY_ADDRESS, sync: false }
     routes:
       - { type: rewrite, source: /*, destination: /index.html }   # SPA fallback for deep links
 
@@ -59,6 +61,7 @@ services:
       - { key: NODE_VERSION, value: "22" }
       - { key: VITE_API_URL, sync: false }                 # same API URL
       - { key: VITE_CAMPAIGN_ID, sync: false }             # the campaign created on-chain
-      - { key: VITE_CREATOR, sync: false }                 # optional default creator address
+      - { key: VITE_NUMA_ROUTER_ADDRESS, sync: false }     # deployed router (falls back to @numa/shared DEPLOYED_ADDRESSES)
+      - { key: VITE_CAMPAIGN_REGISTRY_ADDRESS, sync: false }
     routes:
       - { type: rewrite, source: /*, destination: /index.html }

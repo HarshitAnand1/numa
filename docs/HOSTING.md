@@ -16,6 +16,7 @@
    - `RELAYER_PRIVATE_KEY`, optionally `MERCHANT_SIGNER_KEY`, `ARKIV_WRITER_PRIVATE_KEY`, `ARKIV_ACCESS_KEY`, `AGENT_WALLET_PRIVATE_KEY`, `ANTHROPIC_API_KEY`
    - `VITE_API_URL` (both static sites) = the API's URL. Render gives it as `https://numa-api.onrender.com` unless that name is taken; if it differs, set it after the first deploy and redeploy the sites.
    - `VITE_CAMPAIGN_ID` (demo shop) = the campaign id created on-chain.
+   - `VITE_NUMA_ROUTER_ADDRESS` and `VITE_CAMPAIGN_REGISTRY_ADDRESS` (both sites) = the deployed addresses. If you leave them unset the apps use `DEPLOYED_ADDRESSES` from `@numa/shared`, so commit those after the deploy and a rebuild picks them up.
    - `CORS_ORIGINS` = the two site URLs, comma-separated, e.g. `https://numa-web.onrender.com,https://numa-demo-shop.onrender.com`. `CHECKOUT_BASE_URL` = the demo shop URL.
 3. Apply. The API builds from `docker/api.Dockerfile` (verified to build and boot locally with Render-style env, 2026-11-07); the sites build with pnpm.
 4. Open `https://<api>/health`: it shows the relayer address and its WBT balance. Top it up if zero.
