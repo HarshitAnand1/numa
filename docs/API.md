@@ -18,7 +18,7 @@ All routes below are implemented. Amounts are decimal strings (bigints are never
 | GET | `/links/:code/stats?creator&campaignId` | `{clicks, uniqueVisitors, settled}`. With Arkiv configured the link must be owned by `creator`, and `settled` counts only chain-verified sales |
 
 `POST /orders` body: `{ campaignId: "7", creator: "0x..", buyer: "0x..", amount: "25.00", orderId?: "0x<32 bytes>" }`
-→ `{ order{campaignId,merchant,creator,buyer,gross,orderId,deadline}, digest, authNonce, merchantSig, payoutSigner }`. The buyer must use `authNonce` as the EIP-3009 nonce (it is the `OrderCommitment`; see ADR 0005).
+→ `{ order{campaignId,merchant,creator,buyer,gross,orderId,deadline}, digest, authNonce, merchantSig, payoutSigner, router, chainId }` (the same shape as `@numa/sdk-server`'s `OrderPayload`). The buyer must use `authNonce` as the EIP-3009 nonce (it is the `OrderCommitment`; see ADR 0005).
 
 `POST /relay` body: `{ order, merchantSig, auth:{validAfter,validBefore,v,r,s} }` (`order` is exactly the object returned by `/orders`)
 → `{ status:"settled", txHash, blockNumber }` or `{ error: CODE, message }`.

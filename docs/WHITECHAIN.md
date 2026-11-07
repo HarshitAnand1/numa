@@ -46,6 +46,6 @@ The payment, the three-way split (merchant net, creator commission, protocol fee
 | README explaining setup, architecture, limitations | Done (`README.md`, `ARCHITECTURE.md`) |
 | Demo video, 2 to 4 minutes, every party shown (merchant, creator, buyer) | Not done (`DEMO.md` has the plan) |
 | `WHITECHAIN_FEEDBACK.md` | Drafted from what we actually observed; the deployment experience still needs adding (marked inside) |
-| "A drop-in piece a separate demo app adds in about 20 lines" (what judges want to see) | Server SDK built (`SDK.md`); the React piece and demo shop are not built |
+| "A drop-in piece a separate demo app adds in about 20 lines" (what judges want to see) | Built: server SDK, React `<NumaCheckout />`, and a demo shop that adds it in about 20 lines (`SDK.md`). Not yet run against a deployed router or a real wallet |
 | Free Ankr RPC for hackers (1,500 req/s for 7 days) | Not activated. Worth doing: the indexer and keeper poll the RPC, and the public endpoint is limited to 50 req/s per IP |
 
