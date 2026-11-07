@@ -43,6 +43,12 @@ const schema = z.object({
   /** Optional: when set, Claude phrases agent notes. Decisions never depend on it. */
   ANTHROPIC_API_KEY: z.string().optional(),
   AGENT_LLM_MODEL: z.string().default("claude-opus-5-5"),
+  /** Optional: Google Gemini phrases agent notes instead (it has a free tier). Preferred over Anthropic when both are set. */
+  GEMINI_API_KEY: z.string().optional(),
+  /** A model with a free tier (check Google's pricing page; model names change). */
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  /** Which model phrases notes. auto = Gemini if its key is set, else Claude if its key is set, else templates. */
+  AGENT_LLM_PROVIDER: z.enum(["auto", "gemini", "anthropic", "none"]).default("auto"),
   ORDER_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 });
 export type Env = z.infer<typeof schema>;
