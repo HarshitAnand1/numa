@@ -43,6 +43,7 @@ Enabled only when `ARKIV_WRITER_PRIVATE_KEY` is set. `CAMPAIGN_REGISTRY_ADDRESS`
 | `GET /discovery/trending?limit` | campaigns ranked by live offers (72h), then commission, with `offerCount` |
 | `GET /discovery/creators?niche&channel&maxAskBps&openOnly&limit` | live profiles + `{score, verifiedConversions, label}` (merchant-side search) |
 | `GET /discovery/leaderboard?campaignId&days&limit` | creators ranked by verified reputation (chain-verified conversions only) |
+| `GET /campaigns/:id/offers?limit&offset` | **Offers on a campaign** for the merchant's review screen, each with the creator's profile summary, `decision` (approved/rejected; trusted only when authored by the campaign's on-chain merchant, else null) and `approvedOnChain` (the registry's `isCreatorApproved`, the authority; null without a registry). Paged, max 50 per page |
 | `GET /creators/:address` | **creator card**: profile, reputation, verified endorsements `{count, averageRating, items}`, recent verified sales, rejected claims |
 | `GET /creators/:address/reputation` | `{ verifiedConversions, distinctPayers, grossSettled, commissionEarned, score\|null, label, rejected[] }` |
 | `GET /creators/:address/recommendations` | active campaigns matching the creator's niches and minimum ask (404 without a profile) |
