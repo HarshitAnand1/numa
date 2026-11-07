@@ -13,7 +13,7 @@
 1. Render dashboard → **New → Blueprint**, connect GitHub (a private repo works once you authorise Render), pick this repo and branch `main`.
 2. Render lists every `sync: false` variable and asks for it. Fill them in (keys go only here):
    - `NUMA_ROUTER_ADDRESS`, `CAMPAIGN_REGISTRY_ADDRESS`, `INDEXER_START_BLOCK` (the deployment block)
-   - `RELAYER_PRIVATE_KEY`, optionally `MERCHANT_SIGNER_KEY`, `ARKIV_WRITER_PRIVATE_KEY`, `ARKIV_ACCESS_KEY`, `AGENT_WALLET_PRIVATE_KEY`, `ANTHROPIC_API_KEY`
+   - `RELAYER_PRIVATE_KEY`, optionally `MERCHANT_SIGNER_KEY`, `ARKIV_WRITER_PRIVATE_KEY`, `ARKIV_ACCESS_KEY`, `AGENT_WALLET_PRIVATE_KEY`, `GEMINI_API_KEY` (free tier; or `ANTHROPIC_API_KEY`)
    - `VITE_API_URL` (both static sites) = the API's URL. Render gives it as `https://numa-api.onrender.com` unless that name is taken; if it differs, set it after the first deploy and redeploy the sites.
    - `VITE_CAMPAIGN_ID` (demo shop) = the campaign id created on-chain.
    - `VITE_NUMA_ROUTER_ADDRESS` and `VITE_CAMPAIGN_REGISTRY_ADDRESS` (both sites) = the deployed addresses. If you leave them unset the apps use `DEPLOYED_ADDRESSES` from `@numa/shared`, so commit those after the deploy and a rebuild picks them up.

@@ -41,15 +41,68 @@ const campaignRow = (id: bigint, owner: string, category = "devtools", bps = 800
 });
 const conv = { $key: "0xv", creator: { value: creator }, merchant: { value: merchant }, campaignId: { value: 7n }, gross: { value: 100_000_000n }, commission: { value: 10_000_000n }, status: { value: "held" }, paidAt: { value: 1_700_000_000n }, txHash: { value: txHash }, orderId: { value: orderId } };
 
-function app(rows: Record<string, unknown[]>, opts: { registryMerchant?: string; approved?: boolean } = {}) {
+function app(rows: Record<string, unknown[]>, opts: { registryMerchant?: string; approved?: boolean; approvedFor?: (creator: string) => boolean; settleable?: boolean } = {}) {
   const pub = {
     getTransactionReceipt: vi.fn().mockResolvedValue({ status: "success", logs: [settledLog()], blockNumber: 10n }),
-    readContract: vi.fn(async ({ functionName }: { functionName: string }) => functionName === "isCreatorApproved" ? (opts.approved ?? false) : { merchant: opts.registryMerchant ?? merchant, payoutSigner: merchant, commissionBps: 800n, endsAt: 9_999_999_999n, paused: false, exists: true }),
+    readContract: vi.fn(async ({ functionName, args }: { functionName: string; args: unknown[] }) => functionName === "isSettleable" ? (opts.settleable ?? true) : functionName === "isCreatorApproved" ? (opts.approvedFor ? opts.approvedFor(String(args[1])) : (opts.approved ?? false)) : { merchant: opts.registryMerchant ?? merchant, payoutSigner: merchant, commissionBps: 800n, endsAt: 9_999_999_999n, paused: false, exists: true }),
   } as never;
   const a = Fastify();
   registerDiscoveryRoutes(a, { arkiv: fakeArkiv(rows), pub, router, writer, registry, cache: new Map(), now: () => 1_000 });
   return a;
 }
+
+describe("GET /links/:code", () => {
+  const link = (key: string, owner: string, code = "SPRING24", createdAt = 100n, campaignId = 7n) => ({ $key: key, $owner: owner, $createdAt: createdAt, code: { value: code }, campaignId: { value: campaignId } });
+  it("resolves a code to its creator and campaign when the creator is approved on-chain", async () => {
+    const a = app({ "numa.link": [link("0xl1", creator)] }, { approved: true });
+    const r = (await a.inject("/links/SPRING24")).json();
+    expect(r).toMatchObject({ code: "SPRING24", creator, campaignId: "7", merchant, approved: true, settleable: true, claims: 1 });
+  });
+  it("refuses a link whose owner is not approved (a squatter cannot redirect sales), and says why", async () => {
+    const a = app({ "numa.link": [link("0xl1", stranger)] }, { approved: false });
+    const res = await a.inject("/links/SPRING24");
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe("NOT_APPROVED");
+  });
+  it("when several approved creators claim a code, the earliest claim wins and the conflict is reported", async () => {
+    const a = app({ "numa.link": [link("0xl2", stranger, "SPRING24", 200n), link("0xl1", creator, "SPRING24", 100n)] }, { approved: true });
+    const r = (await a.inject("/links/SPRING24")).json();
+    expect(r).toMatchObject({ creator, claims: 2 });
+  });
+  it("ignores an unapproved squatter even if they claimed first", async () => {
+    const a = app({ "numa.link": [link("0xl1", stranger, "SPRING24", 50n), link("0xl2", creator, "SPRING24", 100n)] }, { approvedFor: (c) => c.toLowerCase() === creator.toLowerCase() });
+    expect((await a.inject("/links/SPRING24")).json()).toMatchObject({ creator, claims: 1 });
+  });
+  it("404s an unknown code, 400s a malformed one, and reports a paused campaign as not settleable", async () => {
+    expect((await app({}).inject("/links/NOPE1234")).statusCode).toBe(404);
+    expect((await app({}).inject("/links/a!")).statusCode).toBe(400);
+    const a = app({ "numa.link": [link("0xl1", creator)] }, { approved: true, settleable: false });
+    expect((await a.inject("/links/SPRING24")).json().settleable).toBe(false);
+  });
+});
+
+describe("GET /creators/:address/offers", () => {
+  const offer = (key: string, owner: string, campaignId = 7n, ask = 900n) => ({ $key: key, $owner: owner, campaignId: { value: campaignId }, channel: { value: "youtube" }, audience: { value: "devs" }, askBps: { value: ask }, expectedReach: { value: 5000n } });
+  const decision = (owner: string, offerKey: string, result: string) => ({ $key: `0xd${offerKey}`, $owner: owner, offerKey: { value: offerKey }, campaignId: { value: 7n }, result: { value: result }, approveTx: { value: "" } });
+  it("lists only the creator's own offers with campaign name and status", async () => {
+    const a = app({ "numa.offer": [offer("0xo1", creator), offer("0xo2", stranger)], "numa.campaign": [campaignRow(7n, merchant)] }, { approved: false });
+    const r = (await a.inject(`/creators/${creator}/offers`)).json();
+    expect(r).toMatchObject({ creator, count: 1 });
+    expect(r.offers[0]).toMatchObject({ offerKey: "0xo1", campaignName: "n", askBps: 900, status: "pending", decision: null, approvedOnChain: false });
+  });
+  it("status follows the merchant's verified decision and the on-chain approval", async () => {
+    const approved = app({ "numa.offer": [offer("0xo1", creator)], "numa.campaign": [campaignRow(7n, merchant)] }, { approved: true });
+    expect((await approved.inject(`/creators/${creator}/offers`)).json().offers[0].status).toBe("approved");
+    const rejected = app({ "numa.offer": [offer("0xo1", creator)], "numa.campaign": [campaignRow(7n, merchant)], "numa.decision": [decision(merchant, "0xo1", "rejected")] }, { approved: false });
+    expect((await rejected.inject(`/creators/${creator}/offers`)).json().offers[0]).toMatchObject({ status: "rejected", decision: "rejected" });
+    const forged = app({ "numa.offer": [offer("0xo1", creator)], "numa.campaign": [campaignRow(7n, merchant)], "numa.decision": [decision(stranger, "0xo1", "approved")] }, { approved: false });
+    expect((await forged.inject(`/creators/${creator}/offers`)).json().offers[0]).toMatchObject({ status: "pending", decision: null }); // a stranger's "approval" is ignored
+  });
+  it("rejects a bad address and returns an empty list for a creator with no offers", async () => {
+    expect((await app({}).inject("/creators/nope/offers")).statusCode).toBe(400);
+    expect((await app({}).inject(`/creators/${creator}/offers`)).json()).toMatchObject({ count: 0, offers: [] });
+  });
+});
 
 describe("GET /campaigns/:id/offers", () => {
   const offer = (key: string, owner: string, ask = 900n) => ({ $key: key, $owner: owner, campaignId: { value: 7n }, channel: { value: "youtube" }, audience: { value: "devs" }, askBps: { value: ask }, expectedReach: { value: 5000n } });

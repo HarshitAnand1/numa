@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { isAddress, type Address, type PublicClient } from "viem";
 import { campaignRegistryAbi } from "@numa/shared";
 import {
-  getProfile, listCampaigns, listDecisions, listEndorsements, listInvitesFor, listLiveOffers, listOffers, searchCreators, topConversions, type ArkivReader,
+  findLinksByCode, getProfile, listCampaigns, listDecisions, listEndorsements, listInvitesFor, listLiveOffers, listOffers, listOffersByCreator, searchCreators, topConversions, type ArkivReader,
 } from "@numa/arkiv";
 import { leaderboard, recommendCampaigns, trendingCampaigns } from "../services/discovery.js";
 import { summarizeEndorsements, verifiedEndorsements } from "../services/endorsements.js";
@@ -126,6 +126,69 @@ export function registerDiscoveryRoutes(app: FastifyInstance, d: DiscoveryDeps) 
         };
       })),
     });
+  });
+
+  const approvedOnChain = async (campaignId: bigint, creator: Address): Promise<boolean | null> => {
+    if (!d.registry) return null;
+    try { return await d.pub.readContract({ address: d.registry, abi: campaignRegistryAbi, functionName: "isCreatorApproved", args: [campaignId, creator] }); } catch { return null; }
+  };
+
+  /**
+   * Resolve an attribution link code to its creator and campaign, so `/r/:code` -> `/checkout/:code` can work on its own.
+   * Anyone can publish a link with any code, so a candidate counts only if its owner is APPROVED for that campaign on-chain
+   * (the router would reject anyone else anyway). If several approved creators claimed the same code, the one that published
+   * first wins (creation block) and `claims` tells the caller there was a conflict.
+   */
+  app.get("/links/:code", async (req, reply) => {
+    const { code } = req.params as { code: string };
+    if (!/^[A-Za-z0-9_-]{4,32}$/.test(code)) return reply.code(400).send({ error: "BAD_REQUEST", message: "link code must be 4-32 chars [A-Za-z0-9_-]" });
+    if (!d.registry) return reply.code(503).send({ error: "REGISTRY_NOT_CONFIGURED", message: "cannot verify creators without CAMPAIGN_REGISTRY_ADDRESS" });
+    const candidates = await findLinksByCode(d.arkiv, code);
+    if (candidates.length === 0) return reply.code(404).send({ error: "NOT_FOUND", message: "no live link with this code" });
+    const verified: (typeof candidates[number] & { settleable: boolean | null })[] = [];
+    for (const c of candidates) {
+      if ((await approvedOnChain(c.campaignId, c.creator)) !== true) continue;
+      let settleable: boolean | null = null;
+      try { settleable = await d.pub.readContract({ address: d.registry, abi: campaignRegistryAbi, functionName: "isSettleable", args: [c.campaignId] }); } catch { /* unknown */ }
+      verified.push({ ...c, settleable });
+    }
+    const win = verified[0];
+    if (!win) return reply.code(404).send({ error: "NOT_APPROVED", message: "this link's creator is not approved for the campaign on-chain" });
+    const merchant = await merchantOf(win.campaignId);
+    return ser({ code, creator: win.creator, campaignId: win.campaignId, merchant, approved: true, settleable: win.settleable, claims: verified.length });
+  });
+
+  /**
+   * A creator's own live offers with where each stands: the merchant's decision (trusted only if authored by the campaign's
+   * on-chain merchant) and the on-chain approval (the authority). `status` is approved, rejected or pending.
+   */
+  app.get("/creators/:address/offers", async (req, reply) => {
+    const address = (req.params as { address: string }).address;
+    const q = req.query as { limit?: string; offset?: string };
+    if (!isAddress(address)) return reply.code(400).send({ error: "invalid address" });
+    const limit = num(q.limit, 25, 50), offset = /^\d+$/.test(q.offset ?? "") ? Math.min(Number(q.offset), 10_000) : 0;
+    const [offers, campaigns] = await Promise.all([listOffersByCreator(d.arkiv, address, limit, offset), listCampaigns(d.arkiv, { limit: 100 }, now())]);
+    const byId = new Map(campaigns.map((c) => [c.campaignId.toString(), c]));
+    const decisionCache = new Map<string, Map<string, string>>();
+    const decisionFor = async (campaignId: bigint, offerKey: string) => {
+      const k = campaignId.toString();
+      if (!decisionCache.has(k)) {
+        const m = await merchantOf(campaignId);
+        const ds = m ? await listDecisions(d.arkiv, campaignId, m).catch(() => []) : [];
+        decisionCache.set(k, new Map(ds.map((x) => [String(x.offerKey).toLowerCase(), x.result])));
+      }
+      return decisionCache.get(k)!.get(offerKey.toLowerCase()) ?? null;
+    };
+    const out = await Promise.all(offers.map(async (o) => {
+      const camp = byId.get(o.campaignId.toString());
+      const [decision, approved] = await Promise.all([decisionFor(o.campaignId, o.entityKey), approvedOnChain(o.campaignId, address)]);
+      return {
+        offerKey: o.entityKey, campaignId: o.campaignId, campaignName: camp?.name ?? null, campaignCategory: camp?.category ?? null, campaignCommissionBps: camp ? Number(camp.commissionBps) : null,
+        channel: o.channel, audience: o.audience, askBps: o.askBps, expectedReach: o.expectedReach, decision, approvedOnChain: approved,
+        status: approved === true || decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : "pending",
+      };
+    }));
+    return ser({ creator: address, count: out.length, offset, offers: out });
   });
 
   const creatorParam = (req: { params: unknown }) => (req.params as { address: string }).address;
