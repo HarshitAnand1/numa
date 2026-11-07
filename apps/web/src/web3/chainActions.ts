@@ -1,6 +1,6 @@
-import { CampaignRegistryAbi } from "@numa/shared";
+import { CampaignRegistryAbi, numaRouterAbi } from "@numa/shared";
 import { isUserRejection } from "@numa/sdk-react";
-import { createPublicClient, createWalletClient, custom, http, parseEventLogs, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, custom, http, parseAbi, parseEventLogs, type Address, type Hex } from "viem";
 import { getProvider, switchTo } from "./arkivWallet";
 import { CHAIN, CHAIN_ID, RPC_URL } from "./config";
 
@@ -100,4 +100,33 @@ export function approveCreatorTx(a: { registry: Address; account: Address; campa
     if (receipt.status !== "success") throw new ChainActionError("REVERTED", "The approval reverted (is this your campaign?). Nothing changed.");
     return { txHash: hash as Hex };
   });
+}
+
+const erc20 = parseAbi([
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+]);
+
+/** How much of the merchant's USDT the router may pull (for refunds, ADR 0001). Read straight from chain. */
+export async function readAllowance(a: { token: Address; owner: Address; spender: Address }): Promise<bigint> {
+  const pub = createPublicClient({ chain: CHAIN, transport: http(RPC_URL) });
+  return pub.readContract({ address: a.token, abi: erc20, functionName: "allowance", args: [a.owner, a.spender] });
+}
+
+/** `USDT.approve(router, amount)`: lets the router pull refunds from this merchant. It does not send any USDT. */
+export function approveRefundsTx(a: { token: Address; account: Address; router: Address; amount: bigint }) {
+  return send(a.router, a.account, async ({ wallet, pub }) => {
+    const hash = await wallet.writeContract({ address: a.token, abi: erc20, functionName: "approve", args: [a.router, a.amount], account: a.account, chain: CHAIN });
+    const receipt = await pub.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") throw new ChainActionError("REVERTED", "The approval reverted. Nothing changed.");
+    return { txHash: hash as Hex };
+  });
+}
+
+/** The order ids a router settled in one transaction (lets the verify page accept a tx hash). Empty if none. */
+export async function orderIdsInTx(txHash: Hex, router: Address): Promise<Hex[]> {
+  const pub = createPublicClient({ chain: CHAIN, transport: http(RPC_URL) });
+  const receipt = await pub.getTransactionReceipt({ hash: txHash });
+  const logs = parseEventLogs({ abi: numaRouterAbi, eventName: "OrderSettled", logs: receipt.logs }).filter((l) => l.address.toLowerCase() === router.toLowerCase());
+  return logs.map((l) => (l as unknown as { args: { orderId: Hex } }).args.orderId);
 }

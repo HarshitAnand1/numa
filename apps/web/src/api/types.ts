@@ -124,3 +124,49 @@ export interface ApiLinkStats {
   settled: { verifiedConversions: number; grossSettled: string; commissionEarned: string } | null;
   note?: string;
 }
+
+/** GET /receipts/:orderId (apps/api routes/ledger.ts). Amounts are decimal USDT strings ("25.000000"). */
+export interface ApiReceipt {
+  orderId: string;
+  merchant: string;
+  creator: string;
+  buyer: string;
+  paidAt: string;
+  grossUsdt: string;
+  protocolFeeUsdt: string;
+  creatorCommissionUsdt: string;
+  merchantNetUsdt: string;
+  refundedUsdt: string;
+  commissionStillHeldUsdt: string;
+  commissionReleased: boolean;
+  status: "held" | "released" | "partially_refunded" | "refunded";
+  txHash: string | null;
+  explorerUrl: string | null;
+}
+
+/** One row of GET /merchants/:address/orders. */
+export interface ApiLedgerRow {
+  orderId: string;
+  txHash: string;
+  explorerUrl: string;
+  paidAt: string;
+  campaignId: string;
+  merchant: string;
+  creator: string;
+  buyer: string;
+  grossUsdt: string;
+  protocolFeeUsdt: string;
+  creatorCommissionUsdt: string;
+  merchantNetUsdt: string;
+  refundedUsdt: string;
+  merchantRefundCostUsdt: string;
+  merchantNetAfterRefundsUsdt: string;
+  commissionReleasedUsdt: string;
+  commissionReleased: boolean;
+  status: string;
+}
+export interface ApiLedger {
+  merchant: string;
+  count: number;
+  orders: ApiLedgerRow[];
+}
