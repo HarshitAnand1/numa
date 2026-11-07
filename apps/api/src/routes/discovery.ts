@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { isAddress, type Address, type PublicClient } from "viem";
 import { campaignRegistryAbi } from "@numa/shared";
 import {
-  getProfile, listCampaigns, listEndorsements, listInvitesFor, listLiveOffers, searchCreators, topConversions, type ArkivReader,
+  getProfile, listCampaigns, listDecisions, listEndorsements, listInvitesFor, listLiveOffers, listOffers, searchCreators, topConversions, type ArkivReader,
 } from "@numa/arkiv";
 import { leaderboard, recommendCampaigns, trendingCampaigns } from "../services/discovery.js";
 import { summarizeEndorsements, verifiedEndorsements } from "../services/endorsements.js";
@@ -90,6 +90,42 @@ export function registerDiscoveryRoutes(app: FastifyInstance, d: DiscoveryDeps) 
     });
     const { verified } = await verifyClaims(d, claims);
     return ser(leaderboard(verified.map((v) => ({ creator: v.creator, buyer: v.buyer, gross: v.gross, commission: v.commission, refunded: v.status === "refunded" })), num(q.limit, 20, 50)));
+  });
+
+  /**
+   * Offers on a campaign, for the merchant's review screen. Each offer carries the creator's profile summary, the merchant's
+   * decision (trusted only if authored by the campaign's on-chain merchant) and whether the creator is approved on-chain
+   * (the authority; null when no registry is configured). Paged with `limit` (max 50) and `offset`.
+   */
+  app.get("/campaigns/:id/offers", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const q = req.query as { limit?: string; offset?: string };
+    if (!/^\d+$/.test(id)) return reply.code(400).send({ error: "BAD_REQUEST", message: "campaign id must be a number" });
+    const campaignId = BigInt(id);
+    const limit = num(q.limit, 25, 50), offset = /^\d+$/.test(q.offset ?? "") ? Math.min(Number(q.offset), 10_000) : 0;
+    const merchant = await merchantOf(campaignId);
+    const [offers, decisions] = await Promise.all([
+      listOffers(d.arkiv, campaignId, limit, offset),
+      merchant ? listDecisions(d.arkiv, campaignId, merchant) : Promise.resolve([]),
+    ]);
+    const decisionFor = new Map(decisions.map((x) => [x.offerKey.toLowerCase(), x.result]));
+    const creators = [...new Set(offers.map((o) => o.creator.toLowerCase()))];
+    const profiles = new Map(await Promise.all(creators.map(async (c) => [c, await getProfile(d.arkiv, c as Address).catch(() => undefined)] as const)));
+    const approved = async (creator: Address): Promise<boolean | null> => {
+      if (!d.registry) return null;
+      try { return await d.pub.readContract({ address: d.registry, abi: campaignRegistryAbi, functionName: "isCreatorApproved", args: [campaignId, creator] }); } catch { return null; }
+    };
+    return ser({
+      campaignId, merchant, merchantVerified: merchant !== null, count: offers.length, offset,
+      offers: await Promise.all(offers.map(async (o) => {
+        const p = profiles.get(o.creator.toLowerCase());
+        return {
+          offerKey: o.entityKey, creator: o.creator, channel: o.channel, audience: o.audience, askBps: o.askBps, expectedReach: o.expectedReach,
+          profile: p ? { displayName: p.displayName, niche: p.niche, channel: p.channel } : null,
+          decision: decisionFor.get(String(o.entityKey).toLowerCase()) ?? null, approvedOnChain: await approved(o.creator),
+        };
+      })),
+    });
   });
 
   const creatorParam = (req: { params: unknown }) => (req.params as { address: string }).address;
