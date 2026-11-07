@@ -1,6 +1,8 @@
 import { isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { relayRequest, whitechainSepolia, type RelayRequest } from "@numa/shared";
+import { whitechainSepolia } from "@numa/shared";
+
+export { toRelayRequest, type BuyerAuth } from "@numa/shared";
 import { OrderSigner } from "./signer.js";
 
 export interface NumaOptions {
@@ -37,17 +39,6 @@ export interface OrderPayload {
   payoutSigner: Address;
   router: Address;
   chainId: number;
-}
-
-/** The buyer's EIP-3009 signature parts (what the checkout sends back after the buyer signs `authNonce`). */
-export interface BuyerAuth { validAfter: string; validBefore: string; v: 27 | 28; r: Hex; s: Hex }
-
-/**
- * Builds the exact body for the relayer's `POST /relay` from a payload and the buyer's signature,
- * validated against the shared schema so a field mismatch fails here rather than at the relayer.
- */
-export function toRelayRequest(payload: OrderPayload, auth: BuyerAuth): RelayRequest {
-  return relayRequest.parse({ order: payload.order, merchantSig: payload.merchantSig, auth });
 }
 
 /**

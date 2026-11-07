@@ -3,6 +3,8 @@
 All routes below are implemented. Amounts are decimal strings (bigints are never emitted as JSON numbers). Features that need Arkiv or the registry are enabled by configuration and say so.
 
 ## Operational notes
+- **Blank settings are unset.** `FOO=` (as shipped in `.env.example`) means "not set": optional features stay off and defaults apply. Mandatory settings left blank are reported as missing.
+- **RPC URL** must be `https`; plain `http` is accepted only for a local node (`127.0.0.1` / `localhost`).
 - **CORS:** off by default. `CORS_ORIGINS` is a comma-separated allowlist of browser origins (or `*`). Preflight is answered with 204.
 - **Rate limit:** `RATE_LIMIT_PER_MINUTE` globally (default 30); `/r/:code` has its own much higher limit.
 - **Discovery timeout:** `/discovery/*` and `/creators/*` return `504 {"error":"UPSTREAM_TIMEOUT"}` after `DISCOVERY_TIMEOUT_MS` (default 15000) instead of hanging on Arkiv.
@@ -18,11 +20,19 @@ All routes below are implemented. Amounts are decimal strings (bigints are never
 | GET | `/links/:code/stats?creator&campaignId` | `{clicks, uniqueVisitors, settled}`. With Arkiv configured the link must be owned by `creator`, and `settled` counts only chain-verified sales |
 
 `POST /orders` body: `{ campaignId: "7", creator: "0x..", buyer: "0x..", amount: "25.00", orderId?: "0x<32 bytes>" }`
-→ `{ order{campaignId,merchant,creator,buyer,gross,orderId,deadline}, digest, authNonce, merchantSig, payoutSigner }`. The buyer must use `authNonce` as the EIP-3009 nonce (it is the `OrderCommitment`; see ADR 0005).
+→ `{ order{campaignId,merchant,creator,buyer,gross,orderId,deadline}, digest, authNonce, merchantSig, payoutSigner, router, chainId }` (the same shape as `@numa/sdk-server`'s `OrderPayload`). The buyer must use `authNonce` as the EIP-3009 nonce (it is the `OrderCommitment`; see ADR 0005).
 
 `POST /relay` body: `{ order, merchantSig, auth:{validAfter,validBefore,v,r,s} }` (`order` is exactly the object returned by `/orders`)
 → `{ status:"settled", txHash, blockNumber }` or `{ error: CODE, message }`.
 Codes: `ORDER_EXPIRED`, `BAD_AUTH_WINDOW`, `BAD_SELF_PURCHASE`, `BAD_MERCHANT_SIG`, `BAD_BUYER_AUTH`, `DUPLICATE` (409), `GAS_PRICE_TOO_HIGH`, `DAILY_CAP_EXCEEDED`, `ADDRESS_LIMIT_EXCEEDED`, `INSUFFICIENT_RELAYER_BALANCE`, `SIMULATION_FAILED`, `TX_REVERTED`, `TX_TIMEOUT` (all 422 unless noted).
+
+## Receipts and the accountant export
+Rebuilt from chain data (public), so no auth. Set `INDEXER_START_BLOCK` to the router's deployment block: the export scans from there in 2,000-block chunks and refuses a range wider than 200 chunks (`400 RANGE_TOO_LARGE`; pass `fromBlock`).
+
+| Path | Returns |
+|---|---|
+| `GET /receipts/:orderId` | Customer receipt from the router's settlement record: parties, `grossUsdt`, `protocolFeeUsdt`, `creatorCommissionUsdt`, `merchantNetUsdt`, `refundedUsdt`, `commissionStillHeldUsdt`, `commissionReleased`, `status` (held, released, partially_refunded, refunded), and `txHash` + `explorerUrl` when this relayer submitted the order (otherwise null). 404 if the order never settled |
+| `GET /merchants/:address/orders?fromBlock&toBlock&format=csv` | The merchant's ledger: one row per settled order with refunds and release folded in. JSON by default, `format=csv` downloads a CSV (columns: `date_utc, order_id, tx_hash, campaign_id, buyer, creator, gross_usdt, protocol_fee_usdt, creator_commission_usdt, merchant_net_usdt, refunded_usdt, merchant_refund_cost_usdt, merchant_net_after_refunds_usdt, commission_released_usdt, status`). Every cell is a number, hex string or fixed word, so nothing needs escaping |
 
 ## Discovery layer
 Enabled only when `ARKIV_WRITER_PRIVATE_KEY` is set. `CAMPAIGN_REGISTRY_ADDRESS` enables on-chain ownership verification; without it the verification flags are `null` (unknown), never `true`.

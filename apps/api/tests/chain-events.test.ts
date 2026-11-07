@@ -69,7 +69,8 @@ describe("Indexer", () => {
     };
     return { sink, rows };
   }
-  const pub = (logs: unknown[]) => ({
+  const pub = (logs: unknown[], settlement: { gross: bigint; fee: bigint; refundedGross: bigint } = { gross: 100_000_000n, fee: 500_000n, refundedGross: 50_000_000n }) => ({
+    readContract: vi.fn().mockResolvedValue(settlement),
     getBlockNumber: vi.fn().mockResolvedValue(100n),
     getLogs: vi.fn().mockResolvedValue(logs),
     getBlock: vi.fn().mockResolvedValue({ timestamp: 1_700_000_000n }),
@@ -95,6 +96,13 @@ describe("Indexer", () => {
     const ix = new Indexer(pub([refund(50_000_000n, 1), settledLog()]), router, sink, new MemoryCursor(0n), 2000n, 0n);
     await ix.tick(); // events given out of order; indexer sorts them
     expect(rows.get(orderId)!.status).toBe("partially_refunded");
+  });
+  it("a refund of gross minus the protocol fee is a full refund; the fee is never refunded", async () => {
+    const { sink, rows } = fakeSink();
+    const item = getAbiItem({ abi: numaRouterAbi, name: "OrderRefunded" });
+    const refund = { address: router, topics: encodeEventTopics({ abi: [item], eventName: "OrderRefunded", args: { orderId } }), data: encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [99_500_000n, 10_000_000n, 89_500_000n]), blockNumber: 11n, transactionHash: txHash, logIndex: 1, blockHash: `0x${"bb".repeat(32)}`, transactionIndex: 0, removed: false };
+    await new Indexer(pub([settledLog(), refund], { gross: 100_000_000n, fee: 500_000n, refundedGross: 99_500_000n }), router, sink, new MemoryCursor(0n), 2000n, 0n).tick();
+    expect(rows.get(orderId)!.status).toBe("refunded");
   });
   it("does nothing when no new blocks", async () => {
     const { sink } = fakeSink();

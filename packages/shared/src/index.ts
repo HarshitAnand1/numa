@@ -34,3 +34,4 @@ export {
   CAMPAIGN_REGISTRY_EVENTS,
 } from "./contracts-types";
 export * from "./agentAuth.js";
+export * from "./relayBody.js";

@@ -70,8 +70,14 @@ export class Indexer {
       } else if (ev.eventName === "OrderRefunded") {
         const c = await this.sink.get(ev.args.orderId);
         if (!c) continue; // settlement not mirrored (yet); chain remains authoritative
-        // Cumulative refunds are not tracked: a refund of >= gross is "refunded", else partial.
-        await this.sink.setStatus(ev.args.orderId, ev.args.refundAmount >= c.gross ? "refunded" : "partially_refunded"); handled++;
+        // The protocol fee is never refunded, so a full refund is gross - fee. Read the cumulative refunded amount from the
+        // router (the authority); if that read fails, fall back to this event alone (a conservative "partially_refunded").
+        let full = false;
+        try {
+          const s = await this.pub.readContract({ address: this.router, abi: numaRouterAbi, functionName: "getSettlement", args: [ev.args.orderId] });
+          full = s.refundedGross >= s.gross - s.fee;
+        } catch { full = false; }
+        await this.sink.setStatus(ev.args.orderId, full ? "refunded" : "partially_refunded"); handled++;
       }
     }
     await this.cursor.set(to);

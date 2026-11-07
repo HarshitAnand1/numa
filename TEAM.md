@@ -5,8 +5,8 @@ numa is built by three human developers. (AI assistance is a tool, not a contrib
 | Member | Name | Workstream | Main files |
 |---|---|---|---|
 | 1 | _TBD_ | Smart contracts and Whitechain deployment | `packages/contracts` |
-| 2 | `HarshitAnand1` (GitHub) | Backend, relayer, Arkiv, negotiation agents | `apps/api`, `packages/arkiv`, `packages/sdk-server` |
-| 3 | _TBD_ | Frontend and product | `apps/web`, `apps/demo-shop`, `packages/sdk-react` |
+| 2 | `HarshitAnand1` (GitHub) | Backend, relayer, Arkiv, negotiation agents, checkout SDK | `apps/api`, `packages/arkiv`, `packages/sdk-server`, `packages/sdk-react`, `apps/demo-shop` |
+| 3 | _TBD_ | Frontend and product | `apps/web` |
 
 ## Handoffs
 - 1 → 2: contract ABIs and deployed addresses (`packages/shared`), and the `OrderSettled` / `OrderRefunded` / `CommissionReleased` events. **Waiting on the first Whitechain Sepolia deployment.**
