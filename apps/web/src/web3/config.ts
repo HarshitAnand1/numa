@@ -39,7 +39,8 @@ export const NUMA_CONFIG: NumaConfig | undefined =
 /** True only when real, on-chain checkout can run. Until then the checkout is a labelled simulation. */
 export const CONTRACTS_READY = Boolean(NUMA_CONFIG);
 
-const rpc = import.meta.env.VITE_RPC_URL || CHAIN.rpcUrls.default.http[0];
+export const RPC_URL: string = import.meta.env.VITE_RPC_URL || CHAIN.rpcUrls.default.http[0];
+const rpc = RPC_URL;
 
 export const wagmiConfig = createConfig({
   chains: [CHAIN],

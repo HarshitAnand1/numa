@@ -22,6 +22,7 @@ import "./detail.css";
 import "./web3.css";
 import "./dashboard.css";
 import "./agents/agents.css";
+import "./tools.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

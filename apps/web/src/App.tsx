@@ -10,6 +10,12 @@ import { parseCheckoutParams, useCheckout, type CheckoutParams } from "@numa/sdk
 import { CHAIN_ID, CONTRACTS_READY, NUMA_CONFIG } from "./web3/config";
 import { WalletButton } from "./web3/WalletButton";
 import { Agents } from "./agents/AgentsPage";
+import type { Address } from "viem";
+import { ProfileEditor, LinksPanel } from "./creator/CreatorTools";
+import { MerchantCampaigns, MerchantOffers } from "./merchant/MerchantTools";
+import { publishMyOffer } from "./web3/arkivActions";
+import { ArkivWriteError, STEP_TEXT, type ArkivStep } from "./web3/arkivWallet";
+import { CHANNELS, validateOffer } from "./web3/entityForms";
 import { parseRoute, routeToPath, titleFor, type Route, type View } from "./routes";
 
 /**
@@ -1749,7 +1755,11 @@ function CampaignDetail({ campaignId }: { campaignId?: string }) {
   const [offerOpen, setOfferOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [ask, setAsk] = useState(18);
-  const [previewed, setPreviewed] = useState(false);
+  const [published, setPublished] = useState<string | null>(null);
+  const [pubStep, setPubStep] = useState<ArkivStep | null>(null);
+  const [pubError, setPubError] = useState<string | null>(null);
+  const { address: me, isConnected: walletOn } = useAccount();
+  const { connect: connectWallet, connectors: walletConnectors } = useConnect();
   const [channel, setChannel] = useState("");
   const [audience, setAudience] = useState("");
   const [reach, setReach] = useState(12000);
@@ -1810,6 +1820,19 @@ function CampaignDetail({ campaignId }: { campaignId?: string }) {
     .toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
     .toUpperCase();
   const canContinue = step !== 1 || (!!channel && audience.trim().length >= 10);
+  const publishOffer = async () => {
+    setPubError(null);
+    const offer = validateOffer({ channel, audience, askPct: myAsk, reach: String(reach) }, found.commissionBps);
+    if (!offer.ok) return setPubError(Object.values(offer.errors)[0] ?? "Check the form.");
+    try {
+      const res = await publishMyOffer({ address: me as Address, campaignId: found.campaignId, offer: offer.value, onStep: setPubStep });
+      setPublished(String(res.entityKey));
+    } catch (e) {
+      setPubError(e instanceof ArkivWriteError ? e.message : "Something went wrong. Nothing was published.");
+    } finally {
+      setPubStep(null);
+    }
+  };
   return (
     <main className="page detail-page">
       <section className="campaign-poster">
@@ -1914,13 +1937,13 @@ function CampaignDetail({ campaignId }: { campaignId?: string }) {
             <div className="offer-modal-head">
               <div>
                 <span>{v.name}</span>
-                <h2>{previewed ? "preview only." : "make your ask."}</h2>
+                <h2>{published ? "published." : "make your ask."}</h2>
               </div>
               <button onClick={() => setOfferOpen(false)} aria-label="Close">
                 <Icon name="close" />
               </button>
             </div>
-            {!previewed ? (
+            {!published ? (
               <>
                 <div className="offer-progress">
                   {["channel + audience", "commission + reach", "review"].map((x, i) => (
@@ -1943,9 +1966,11 @@ function CampaignDetail({ campaignId }: { campaignId?: string }) {
                           <option value="" disabled>
                             choose a channel
                           </option>
-                          <option>short video</option>
-                          <option>newsletter</option>
-                          <option>live stream</option>
+                          {CHANNELS.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.label}
+                            </option>
+                          ))}
                         </select>
                         <small>where the product will actually appear.</small>
                       </label>
@@ -1994,7 +2019,7 @@ function CampaignDetail({ campaignId }: { campaignId?: string }) {
                     <div className="offer-review">
                       <div>
                         <span>CHANNEL</span>
-                        <b>{channel || "—"}</b>
+                        <b>{CHANNELS.find((c) => c.value === channel)?.label ?? "—"}</b>
                       </div>
                       <div>
                         <span>AUDIENCE</span>
@@ -2013,34 +2038,52 @@ function CampaignDetail({ campaignId }: { campaignId?: string }) {
                       <aside>
                         <b>ARKIV WRITE / tGLM REQUIRED</b>
                         <p>
-                          Publishing will need your wallet to sign an entity publish. It never
-                          moves USDT. Wallet signing isn’t built yet.
+                          Publishing is a transaction your wallet signs on Arkiv (a little tGLM). The
+                          offer is owned by your wallet and lasts 72 hours. It never moves USDT.
                         </p>
                       </aside>
                     </div>
                   )}
                 </div>
+                {pubError && (
+                  <p className="ag-msg err" role="alert">
+                    {pubError}
+                  </p>
+                )}
                 <div className="offer-modal-actions">
-                  <button disabled={step === 1} onClick={() => setStep(step - 1)}>
+                  <button disabled={step === 1 || pubStep !== null} onClick={() => setStep(step - 1)}>
                     BACK
                   </button>
                   <button
                     className="hard-button"
-                    disabled={!canContinue}
-                    onClick={() => (step < 3 ? setStep(step + 1) : setPreviewed(true))}
+                    disabled={!canContinue || pubStep !== null}
+                    onClick={() =>
+                      step < 3
+                        ? setStep(step + 1)
+                        : !walletOn
+                          ? walletConnectors[0] && connectWallet({ connector: walletConnectors[0], chainId: CHAIN_ID })
+                          : publishOffer()
+                    }
                   >
-                    {step < 3 ? "CONTINUE" : "PREVIEW OFFER"} <Icon name="arrow" />
+                    {step < 3
+                      ? "CONTINUE"
+                      : pubStep
+                        ? STEP_TEXT[pubStep]
+                        : !walletOn
+                          ? "CONNECT WALLET TO PUBLISH"
+                          : "PUBLISH TO ARKIV"}{" "}
+                    <Icon name="arrow" />
                   </button>
                 </div>
               </>
             ) : (
               <div className="offer-success">
-                <Stamp>NOT PUBLISHED</Stamp>
-                <strong>preview</strong>
-                <span>no wallet is connected</span>
+                <Stamp tone="green">PUBLISHED</Stamp>
+                <strong>72h</strong>
+                <span>until this offer expires</span>
                 <p>
-                  Nothing was written to Arkiv and no merchant was notified. Publishing an offer
-                  will need a wallet signature and test gas (tGLM) on Arkiv.
+                  Your offer is live on Arkiv, owned by your wallet ({shortAddress(me ?? "", 6, 4)}), entity {shortAddress(published ?? "", 8, 6)}. The
+                  merchant can now approve or reject it; approval is a separate on-chain step they sign.
                 </p>
                 <button onClick={() => setOfferOpen(false)}>DONE</button>
               </div>
@@ -2290,6 +2333,7 @@ function AppSidebar({
   setActive,
   title,
   counts,
+  sampleItems,
 }: {
   role: "creator" | "merchant";
   active: string;
@@ -2298,6 +2342,8 @@ function AppSidebar({
   title?: string;
   /** real badge counts per item; without it the (mock) merchant badge stays */
   counts?: Record<string, number>;
+  /** items still showing sample data: they get a visible "sample" tag */
+  sampleItems?: string[];
 }) {
   const creatorItems = [
     "overview",
@@ -2333,6 +2379,7 @@ function AppSidebar({
           >
             <small>0{i + 1}</small>
             {item}
+            {sampleItems?.includes(item) && <em className="sample-tag">sample</em>}
             {counts ? (counts[item] ?? 0) > 0 && <i>{counts[item]}</i> : item === "offers" && <i>{role === "merchant" ? 6 : 3}</i>}
           </button>
         ))}
@@ -2530,10 +2577,18 @@ function CreatorDashboard({
   );
 
   const content =
-    tab === "profile" ? (
+    !sample && tab === "profile" ? (
+      <section className="app-panel profile-panel creator-tools">
+        <ProfileEditor address={address as Address} profile={profile} onChanged={() => setTimeout(card.reload, 3000)} />
+      </section>
+    ) : !sample && tab === "links" ? (
+      <section className="app-panel links-panel creator-tools">
+        <LinksPanel address={address as Address} campaigns={camps.data ?? []} />
+      </section>
+    ) : tab === "profile" ? (
       <section className="app-panel profile-panel">
         <SampleBanner>
-          Publishing a profile needs a wallet signature and tGLM on Arkiv, which isn’t built yet. This is a preview of the form.
+          This is the sample dashboard: connect a wallet to publish a real profile.
           {profile ? " Your published profile is shown on your public card." : ""}
         </SampleBanner>
         <div className="panel-title"><div><span>PROFILE / WALLET-OWNED</span><h2>say enough.<br />not everything.</h2></div><span className="status live">● PUBLISHED</span></div>
@@ -2663,7 +2718,7 @@ function CreatorDashboard({
     ) : tab === "links" ? (
       <section className="app-panel links-panel">
         <SampleBanner>
-          Click and earnings numbers below are samples. Creating a link needs wallet signing on Arkiv, which isn’t built yet. Real link stats will come from the API’s link-stats endpoint.
+          Click and earnings numbers below are samples. This is the sample dashboard: connect a wallet to create real links and see real click and sale numbers.
         </SampleBanner>
         <div className="panel-title">
           <div>
@@ -2919,7 +2974,14 @@ function CreatorDashboard({
     );
   return (
     <main className="product-app">
-      <AppSidebar role="creator" active={tab} setActive={setTab} title={title} counts={{ invites: invites.length }} />
+      <AppSidebar
+        role="creator"
+        active={tab}
+        setActive={setTab}
+        title={title}
+        counts={{ invites: invites.length }}
+        sampleItems={sample ? ["overview", "discover", "offers", "links", "invites", "earnings", "profile"] : ["offers"]}
+      />
       {content}
     </main>
   );
@@ -2927,9 +2989,27 @@ function CreatorDashboard({
 
 function MerchantApp() {
   const [tab, setTab] = useState("overview");
-  const [wizard, setWizard] = useState(1);
-  const [commission, setCommission] = useState(18);
-  const [approved, setApproved] = useState("");
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const noWallet = typeof window !== "undefined" && !("ethereum" in window);
+  const gate = (
+    <section className="app-panel gate-panel">
+      <div className="app-greeting">
+        <span>MERCHANT APP / WALLET REQUIRED</span>
+        <h1>
+          WHO’S
+          <br />
+          <em>SELLING?</em>
+        </h1>
+      </div>
+      <p>Creating campaigns and approving creators are signed by your wallet. Nothing about you is stored.</p>
+      <div className="gate-actions">
+        <button className="hard-button" disabled={isPending} onClick={() => !noWallet && connectors[0] && connect({ connector: connectors[0], chainId: CHAIN_ID })}>
+          {isPending ? "CONNECTING…" : noWallet ? "NO WALLET FOUND IN THIS BROWSER" : "CONNECT WALLET"} <Icon name="arrow" />
+        </button>
+      </div>
+    </section>
+  );
   const offers = [
     { name: "RIO SANTOS", score: 87, ask: 18, reach: "12–18k", channel: "short video" },
     { name: "MARA.WAV", score: 84, ask: 20, reach: "8–11k", channel: "newsletter" },
@@ -2970,187 +3050,9 @@ function MerchantApp() {
         </aside>
       </section>
     ) : tab === "campaigns" ? (
-      <section className="app-panel wizard-panel">
-        <div className="panel-title">
-          <div>
-            <span>NEW CAMPAIGN</span>
-            <h2>
-              set the terms.
-              <br />
-              then live with them.
-            </h2>
-          </div>
-          <span className="wizard-count">0{wizard} / 04</span>
-        </div>
-        <div className="wizard-steps">
-          {["basics", "commission", "schedule", "publish"].map((x, i) => (
-            <button
-              className={wizard === i + 1 ? "active" : wizard > i + 1 ? "done" : ""}
-              onClick={() => setWizard(i + 1)}
-              key={x}
-            >
-              <i>{wizard > i + 1 ? "✓" : i + 1}</i>
-              {x}
-            </button>
-          ))}
-        </div>
-        <div className="wizard-body">
-          {wizard === 1 && (
-            <>
-              <label>
-                CAMPAIGN NAME
-                <input defaultValue="NO SLEEP / DROP 09" />
-              </label>
-              <label>
-                DESCRIPTION
-                <textarea defaultValue="A late-night footwear drop for runners who don't ask permission from daylight." />
-              </label>
-              <div className="form-pair">
-                <label>
-                  CATEGORY
-                  <select>
-                    <option>streetwear</option>
-                  </select>
-                </label>
-                <label>
-                  REGION
-                  <select>
-                    <option>global</option>
-                  </select>
-                </label>
-              </div>
-            </>
-          )}
-          {wizard === 2 && (
-            <>
-              <label className="commission-field">
-                MAXIMUM COMMISSION<strong>{commission}%</strong>
-                <input
-                  type="range"
-                  min="1"
-                  max="50"
-                  value={commission}
-                  onChange={(e) => setCommission(+e.target.value)}
-                />
-                <small>hard maximum: 50%. creator asks may be lower.</small>
-              </label>
-              <div className="fee-example">
-                <span>ON A 100.00 USDT SALE</span>
-                <p>
-                  merchant receives <b>{(99 - commission).toFixed(2)}</b>
-                </p>
-                <p>
-                  creator can earn up to <b>{commission.toFixed(2)}</b>
-                </p>
-                <p>
-                  protocol fee <b>1.00 max</b>
-                </p>
-              </div>
-            </>
-          )}
-          {wizard === 3 && (
-            <>
-              <div className="form-pair">
-                <label>
-                  START DATE
-                  <input type="date" defaultValue="2026-04-20" />
-                </label>
-                <label>
-                  END DATE
-                  <input type="date" defaultValue="2026-05-30" />
-                </label>
-              </div>
-              <div className="warning-note">
-                ! Maximum practical window is about 175 days due to authorization limits. Long
-                campaigns are easier to pause than to explain.
-              </div>
-              <label>
-                PAYOUT SIGNER
-                <input defaultValue="0x4be019c0209A7E8839D45b2B8A01" />
-              </label>
-            </>
-          )}
-          {wizard === 4 && (
-            <div className="publish-steps">
-              <div>
-                <span>01</span>
-                <b>REGISTER ON WHITECHAIN</b>
-                <p>Campaign terms and payout signer. Requires WBT gas.</p>
-                <i>money rules</i>
-              </div>
-              <div>
-                <span>02</span>
-                <b>PUBLISH TO ARKIV</b>
-                <p>Discoverable listing. Requires tGLM gas.</p>
-                <i>marketplace listing</i>
-              </div>
-              <p>Two networks. Two confirmations. We will not pretend otherwise.</p>
-            </div>
-          )}
-        </div>
-        <div className="wizard-actions">
-          <button disabled={wizard === 1} onClick={() => setWizard(wizard - 1)}>
-            BACK
-          </button>
-          <button className="hard-button" onClick={() => setWizard(Math.min(4, wizard + 1))}>
-            {wizard === 4 ? "EXPLAIN + CONFIRM" : "CONTINUE"} <Icon name="arrow" />
-          </button>
-        </div>
-      </section>
+      address && isConnected ? <MerchantCampaigns address={address} registry={NUMA_CONFIG?.registry} /> : gate
     ) : tab === "offers" ? (
-      <section className="app-panel offer-review">
-        <div className="panel-title">
-          <div>
-            <span>NO SLEEP / DROP 08</span>
-            <h2>
-              six asks.
-              <br />
-              three look real.
-            </h2>
-          </div>
-          <button className="outline-button">SELECT ALL</button>
-        </div>
-        <div className="offer-columns">
-          <div>
-            {offers.map((offer) => (
-              <article className={approved === offer.name ? "approved" : ""} key={offer.name}>
-                <div className="offer-score">{offer.score}</div>
-                <div>
-                  <h3>{offer.name}</h3>
-                  <p>
-                    {offer.channel} · expected reach {offer.reach}
-                  </p>
-                  <span>{offer.ask}% ASK · EXPIRES IN 31H</span>
-                </div>
-                <div className="offer-actions">
-                  <button>REJECT</button>
-                  <button onClick={() => setApproved(offer.name)}>
-                    {approved === offer.name ? "APPROVED ✓" : "APPROVE"}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-          <aside>
-            <span>WHAT APPROVAL PERMITS</span>
-            <h3>attributed sales. nothing else.</h3>
-            <p>
-              This creator can create links for this campaign. Approval does not move funds or
-              guarantee reach.
-            </p>
-            <div>
-              <b>WHITECHAIN</b>
-              <span>approveCreator()</span>
-              <small>estimated 0.003 WBT</small>
-            </div>
-            <div>
-              <b>ARKIV</b>
-              <span>decision entity</span>
-              <small>estimated 0.01 tGLM</small>
-            </div>
-          </aside>
-        </div>
-      </section>
+      address && isConnected ? <MerchantOffers address={address} registry={NUMA_CONFIG?.registry} /> : gate
     ) : (
       <section className="app-panel merchant-overview">
         <div className="app-greeting">
@@ -3231,7 +3133,14 @@ function MerchantApp() {
     );
   return (
     <main className="product-app">
-      <AppSidebar role="merchant" active={tab} setActive={setTab} />
+      <AppSidebar
+        role="merchant"
+        active={tab}
+        setActive={setTab}
+        title={address && isConnected ? shortAddress(address) : "not connected"}
+        counts={{}}
+        sampleItems={["overview", "creators", "invites", "orders", "settings"]}
+      />
       {content}
     </main>
   );

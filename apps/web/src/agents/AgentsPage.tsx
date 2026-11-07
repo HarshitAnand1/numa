@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { isUserRejection } from "@numa/sdk-react";
 import { useAccount, useConnect, useSendTransaction, useSignMessage, useSwitchChain } from "wagmi";
 import type { Address } from "viem";
-import { ApiError } from "../api/client";
+import { useLive } from "../api/useLive";
 import { bpsToPercent, shortAddress } from "../api/format";
 import { CHAIN_ID } from "../web3/config";
 import {
@@ -15,7 +15,8 @@ import {
   type ThreadDetail,
   type ThreadSummary,
 } from "./agentsApi";
-import { BindingError, bindAgent, revokeBinding, type BindStep } from "./binding";
+import { ArkivWriteError, STEP_TEXT, type ArkivStep } from "../web3/arkivWallet";
+import { bindAgent, revokeBinding } from "./binding";
 import {
   defaultForm,
   formFromPolicy,
@@ -28,47 +29,7 @@ import {
   type PolicyForm,
 } from "./policyForm";
 
-/** Loads from the API, optionally polling (paused while the tab is hidden). No demo fallback: this is a live, private feature. */
-function useLive<T>(fetcher: (s: AbortSignal) => Promise<T>, deps: readonly unknown[], opts: { every?: number; enabled?: boolean } = {}) {
-  const { every, enabled = true } = opts;
-  const [state, setState] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: enabled });
-  const [nonce, setNonce] = useState(0);
-  const f = useRef(fetcher);
-  f.current = fetcher;
-  useEffect(() => {
-    if (!enabled) {
-      setState({ loading: false });
-      return;
-    }
-    let cancelled = false;
-    let ctrl = new AbortController();
-    const run = () => {
-      ctrl.abort();
-      ctrl = new AbortController();
-      f.current(ctrl.signal)
-        .then((data) => !cancelled && setState({ data, loading: false }))
-        .catch((e: unknown) => {
-          if (cancelled || ctrl.signal.aborted) return;
-          setState((s) => ({ data: s.data, loading: false, error: e instanceof ApiError ? (e.detail ?? e.message) : "unexpected error" }));
-        });
-    };
-    run();
-    const id = every ? window.setInterval(() => !document.hidden && run(), every) : 0;
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-      if (id) window.clearInterval(id);
-    };
-  }, [...deps, nonce, enabled, every]);
-  return { ...state, reload: useCallback(() => setNonce((n) => n + 1), []) };
-}
-
 const FAUCET = "https://hub.arkiv.network/faucet";
-const STEP_TEXT: Record<BindStep, string> = {
-  "arkiv-network": "Switching your wallet to the Arkiv network…",
-  sign: "Confirm the binding in your wallet (costs a little tGLM)…",
-  "back-to-whitechain": "Switching back to Whitechain…",
-};
 
 export function Agents() {
   const { address, isConnected } = useAccount();
@@ -145,7 +106,7 @@ export function Agents() {
 
 function BindingCard({ principal, role, agentAddress, enabled }: { principal: Address; role: AgentRole; agentAddress: string | null; enabled: boolean }) {
   const binding = useLive((s) => agentsApi.binding(principal, role, s), [principal, role], { every: 15000 });
-  const [busy, setBusy] = useState<BindStep | "waiting" | null>(null);
+  const [busy, setBusy] = useState<ArkivStep | "waiting" | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const info: AgentBindingInfo | undefined = binding.data;
 
@@ -173,7 +134,7 @@ function BindingCard({ principal, role, agentAddress, enabled }: { principal: Ad
       setMsg({ kind: "ok", text: kind === "bind" ? "Binding published. Your agent can now negotiate for you." : "Binding deleted. The agent can no longer speak for you." });
       await settle(kind === "bind");
     } catch (e) {
-      setMsg({ kind: "err", text: e instanceof BindingError ? e.message : "Something went wrong. Nothing was changed." });
+      setMsg({ kind: "err", text: e instanceof ArkivWriteError ? e.message : "Something went wrong. Nothing was changed." });
     } finally {
       setBusy(null);
     }
@@ -205,7 +166,7 @@ function BindingCard({ principal, role, agentAddress, enabled }: { principal: Ad
       </dl>
       {!info?.bound && (
         <button className="hard-button" disabled={!enabled || !agentAddress || !!busy} onClick={() => run("bind")}>
-          {busy ? STEP_TEXT[busy as BindStep] ?? "Waiting for Arkiv to index it…" : "BIND MY AGENT"}
+          {busy ? STEP_TEXT[busy as ArkivStep] ?? "Waiting for Arkiv to index it…" : "BIND MY AGENT"}
         </button>
       )}
       {mine.map((b) => (
