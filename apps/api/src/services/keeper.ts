@@ -2,6 +2,7 @@ import type { Account, Address, Hex, PublicClient, WalletClient } from "viem";
 import { numaRouterAbi } from "@numa/shared";
 import type { ReleaseQueue } from "./releaseQueue.js";
 import type { RelayStore } from "./store.js";
+import { withGasBuffer } from "./relayer.js";
 
 export interface KeeperConfig {
   router: Address;
@@ -61,7 +62,7 @@ export class ReleaseKeeper {
         let request;
         try { ({ request } = await this.pub.simulateContract({ address: this.cfg.router, abi: numaRouterAbi, functionName: "release", args, account: this.account })); }
         catch (e) { await this.queue.markFailed(item.orderId, e instanceof Error ? e.message.split("\n")[0]! : "simulation failed"); out.failed++; continue; }
-        const gas = await this.pub.estimateContractGas({ address: this.cfg.router, abi: numaRouterAbi, functionName: "release", args, account: this.account });
+        const gas = withGasBuffer(await this.pub.estimateContractGas({ address: this.cfg.router, abi: numaRouterAbi, functionName: "release", args, account: this.account }));
         const maxCost = gas * gasPrice;
         if ((await this.store.spentToday(day)) + maxCost > this.cfg.dailyCapWei) { out.skipped++; log({ evt: "keeper.daily_cap", orderId: item.orderId }); continue; }
         if ((await this.pub.getBalance({ address: this.account.address })) < maxCost) { out.skipped++; log({ evt: "keeper.low_balance", orderId: item.orderId }); continue; }
