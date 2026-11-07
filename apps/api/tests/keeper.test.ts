@@ -34,6 +34,7 @@ describe("ReleaseKeeper", () => {
     await queue.add(oid(1), 1_000);
     expect(await keeper.tick()).toMatchObject({ released: 1, failed: 0 });
     expect(wallet.writeContract).toHaveBeenCalledOnce();
+    expect((wallet.writeContract.mock.calls[0]![0] as { gas: bigint }).gas).toBe(125n); // buffered estimate
     expect(queue.all()[0]!.done).toBe(true);
     expect(await store.spentToday("1970-01-01")).toBe(900n);
   });
