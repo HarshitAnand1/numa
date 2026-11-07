@@ -21,7 +21,17 @@ Not yet verified: explorer-published source for the implementation; WBT faucet s
 Use Foundry keystore (`cast wallet import <name> --interactive`) — run by a human. See `.agents/skills/whitechain-dev/references/deploy-contract.md`.
 
 ## Deployment status
-Not deployed yet. Contract addresses will go in `packages/shared/src/addresses.ts` and `.env` after the first deployment (`DEPLOYMENT_CHECKLIST.md`).
+Deployed by Member 1 and **checked on-chain on 2026-11-07**:
+
+| | |
+|---|---|
+| `CampaignRegistry` | [`0xD924385D22626dB2894D25b5f12253BC36148425`](https://explorer.testnet.whitechain.io/address/0xd924385d22626db2894d25b5f12253bc36148425) (explorer: verified) |
+| `NumaRouter` | [`0x51fCf8F50ABB17a0d4D70BA14B4F6394A583c2Fc`](https://explorer.testnet.whitechain.io/address/0x51fcf8f50abb17a0d4d70ba14b4f6394a583c2fc) (explorer: verified) |
+| Test USDT | `0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7` |
+| Deployed in block | 12414186 (both), by `0x9dC62Bef98095eB2Bef9C8E9d5432C989115Df39` |
+| Config read from the router | `registry()` and `usdt()` match the above, `feeBps` 50 (0.5%), `refundWindow` 60 s, fee recipient `0x83d7B74fC373e183c6aC32793fb9435657eAd3BA` |
+
+`pnpm --filter @numa/api preflight` passes every contract check against these addresses; its only failure at the time was the relayer wallet holding 0 WBT. The addresses are in `packages/shared/src/addresses.ts` and `.env.example`.
 
 ## Whitechain hackathon tracks: where numa fits
 Primary: **Scale · Payments Nobody Notices** (gasless checkout; the merchant covers gas through EIP-3009 and our own relayer). Close second: **Operate · Stablecoin Payments for Business** (a drop-in checkout with refunds and an on-chain receipt for both merchant and customer). Not a fit: Tokenize (no RWA) and Continuity (not a pre-existing product). Confirm with the organisers whether one team may enter more than one track.
@@ -39,7 +49,7 @@ The payment, the three-way split (merchant net, creator commission, protocol fee
 ### Qualification checklist (status as of 2026-11-07)
 | Requirement | Status |
 |---|---|
-| Contracts deployed on Whitechain Sepolia (1874) and **verified on the explorer** | **Not done.** Deploy script and checklist exist (`DEPLOYMENT_CHECKLIST.md`); verification on the explorer is a separate step |
+| Contracts deployed on Whitechain Sepolia (1874) and **verified on the explorer** | **Done.** Deployed and listed as verified by the explorer (see the table above). Re-check the verification status before submitting |
 | At least one real USDT payment (`0xcedf…55a7`) settled through the main flow, **explorer link in the README** | **Not done.** No link exists yet; none will be invented |
 | README line on why on-chain stablecoin settlement | Done (section above, mirrored in the README) |
 | Public repo with steady commit history | Repo is currently private; history is incremental |
