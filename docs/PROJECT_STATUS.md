@@ -54,7 +54,7 @@ The backend's pre-contract proposal differed from what Member 1 shipped. Fixed i
 - **Discovery:** campaigns, trending, creator search, leaderboard, creator card, recommendations, invites (`API.md`, `ARKIV.md`). Seeded with `[DEMO]` data on Rabdi via `seed:demo`; those campaign ids do not exist on-chain and show as unverified.
 - **Merchant review:** `GET /campaigns/:id/offers` (offers with creator profile, the merchant's verified decision and on-chain approval); tested with fakes, not run against live Arkiv data for this route.
 - **Receipts and export:** `GET /receipts/:orderId` and `GET /merchants/:address/orders` (JSON or accountant CSV), rebuilt from chain events; checked against on-chain balances in the rehearsal.
-- **Deploy tooling:** fork rehearsal and a read-only preflight (`DEVELOPMENT.md`).
+- **Deploy tooling:** fork rehearsal and a read-only preflight (`DEVELOPMENT.md`); a Render Blueprint (`render.yaml`) and runbook (`HOSTING.md`). **Nothing is hosted yet**; the Blueprint is not validated by Render, and the API image builds and boots locally (the Dockerfile was missing the `sdk-react` package and is fixed).
 - **Operational:** CORS allowlist (`CORS_ORIGINS`), discovery timeout (504 after `DISCOVERY_TIMEOUT_MS`), Postgres migrations (001-005), Dockerfile.
 - **Negotiation agents** (`AGENTS.md`, ADR 0008, **Proposed**): `numa.agent` and `numa.negotiation` entities, rules engine with private guardrails, signed policy API, verified threads, deal tickets, runner loop (off unless `AGENT_WALLET_PRIVATE_KEY` is set), optional Claude phrasing. Feed and status endpoints for the UI (`/agents/threads`, `/agents/binding`) and the shared signed-text builder (`@numa/shared`) are built. Not built: any UI, a live run against a registry.
 

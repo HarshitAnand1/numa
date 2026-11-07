@@ -1,0 +1,67 @@
+# Render Blueprint for numa. Create it in the Render dashboard: New > Blueprint > pick this repo (docs/HOSTING.md).
+# Secrets are `sync: false`: Render asks for them at creation and they are never stored in git.
+# NOT validated by Render from here: Render checks this file when you create the Blueprint.
+databases:
+  - name: numa-db
+    plan: free            # free Postgres is time-limited on Render; see docs/HOSTING.md for the Neon alternative
+    databaseName: numa
+    user: numa
+
+services:
+  # API: relayer, indexer, keeper, discovery, agents. Background loops need it awake (docs/HOSTING.md: free instances sleep).
+  - type: web
+    name: numa-api
+    runtime: docker
+    dockerfilePath: ./docker/api.Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - { key: WHITECHAIN_RPC_URL, value: "https://rpc.testnet.whitechain.io" }
+      - { key: WHITECHAIN_CHAIN_ID, value: "1874" }
+      - { key: NUMA_ROUTER_ADDRESS, sync: false }
+      - { key: CAMPAIGN_REGISTRY_ADDRESS, sync: false }
+      - { key: INDEXER_START_BLOCK, sync: false }          # the router's deployment block
+      - { key: RELAYER_PRIVATE_KEY, sync: false }          # a dedicated hot wallet holding a little WBT
+      - { key: MERCHANT_SIGNER_KEY, sync: false }          # demo merchant's payout-signer key (optional)
+      - { key: RELAYER_MAX_GAS_PRICE_GWEI, value: "20" }
+      - { key: RELAYER_DAILY_CAP_WBT, value: "0.5" }
+      - { key: RELAYER_PER_ADDRESS_DAILY_LIMIT, value: "5" }
+      - { key: DATABASE_URL, fromDatabase: { name: numa-db, property: connectionString } }
+      - { key: CORS_ORIGINS, sync: false }                 # the web app and demo shop URLs, comma-separated
+      - { key: CHECKOUT_BASE_URL, sync: false }            # the demo shop URL (where /r/:code redirects)
+      - { key: CLICK_VISITOR_SECRET, generateValue: true }
+      - { key: ARKIV_WRITER_PRIVATE_KEY, sync: false }     # optional: enables discovery and conversion mirroring
+      - { key: ARKIV_ACCESS_KEY, sync: false }
+      - { key: AGENT_WALLET_PRIVATE_KEY, sync: false }     # optional: enables negotiation agents
+      - { key: ANTHROPIC_API_KEY, sync: false }            # optional: Claude phrases agent notes
+
+  # Main web app (Vite SPA).
+  - type: web
+    name: numa-web
+    runtime: static
+    buildCommand: npm install -g pnpm@10.34.9 && pnpm install --frozen-lockfile && pnpm --filter @numa/web build
+    staticPublishPath: apps/web/dist
+    envVars:
+      - { key: NODE_VERSION, value: "22" }
+      - { key: VITE_API_URL, sync: false }                 # the API's public URL, e.g. https://numa-api.onrender.com
+      - { key: VITE_NUMA_ROUTER_ADDRESS, sync: false }     # deployed router (falls back to @numa/shared DEPLOYED_ADDRESSES)
+      - { key: VITE_CAMPAIGN_REGISTRY_ADDRESS, sync: false }
+    routes:
+      - { type: rewrite, source: /*, destination: /index.html }   # SPA fallback for deep links
+
+  # Demo store that adds the checkout in about 20 lines.
+  - type: web
+    name: numa-demo-shop
+    runtime: static
+    buildCommand: npm install -g pnpm@10.34.9 && pnpm install --frozen-lockfile && pnpm --filter @numa/demo-shop build
+    staticPublishPath: apps/demo-shop/dist
+    envVars:
+      - { key: NODE_VERSION, value: "22" }
+      - { key: VITE_API_URL, sync: false }                 # same API URL
+      - { key: VITE_CAMPAIGN_ID, sync: false }             # the campaign created on-chain
+      - { key: VITE_NUMA_ROUTER_ADDRESS, sync: false }     # deployed router (falls back to @numa/shared DEPLOYED_ADDRESSES)
+      - { key: VITE_CAMPAIGN_REGISTRY_ADDRESS, sync: false }
+    routes:
+      - { type: rewrite, source: /*, destination: /index.html }
