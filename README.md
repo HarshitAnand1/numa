@@ -25,8 +25,9 @@ There is no Stripe, no oracle, no verifier signature and no campaign escrow: pro
 | `packages/arkiv` | Arkiv schemas, safe writer, publish/query functions, live checks and demo seeding |
 | `packages/sdk-server` | merchant-side order signing (`Numa`, `OrderSigner`) |
 | `apps/api` | relayer, reconciler, release keeper, indexer, discovery + reputation API, click tracker, negotiation agents |
-| `apps/web` | Vite + React app (public screens wired to the API; checkout still mock) |
-| `packages/sdk-react`, `apps/demo-shop` | not started |
+| `apps/web` | Vite + React app (public screens wired to the API; its own checkout screen is still mock; real checkout is `sdk-react`) |
+| `packages/sdk-react` | `<NumaCheckout />`: gasless EIP-3009 checkout for React (built, tested with a fake wallet) |
+| `apps/demo-shop` | a store page that adds numa checkout in about 20 lines |
 | `docs/` | design, architecture, per-component docs, ADRs; start at [`docs/README.md`](docs/README.md) |
 | `arkiv/` | hackathon submission files for the Arkiv track |
 

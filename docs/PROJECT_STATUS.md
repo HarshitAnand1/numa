@@ -12,11 +12,11 @@ _Last reviewed: 2026-11-07. Everything marked "verified" was run; everything els
 | 3 Contracts | Built, **not deployed**. `CampaignRegistry` + `NumaRouter`, 55 Foundry tests (unit, fuzz, invariants), `OrderCommitment` nonce binding (ADR 0005), pre-deployment hardening (ADR 0006). A deploy script and checklist exist (`DEPLOYMENT_CHECKLIST.md`). Owner: Member 1 |
 | 4 Arkiv + backend | Built and tested; **never run against a deployed router**. Relayer with guards, reconciler, release keeper, indexer, click tracker, discovery + reputation API, negotiation agents (below), Dockerfile, Postgres store. Arkiv live checks pass on Rabdi (`live:check` 9/9, `live:agents` 4/4, `live:browser` 3/3) |
 | 5 Frontend | Partial. Public screens (home, campaigns, campaign detail, creator card, leaderboard) read the API with an honest DEMO DATA fallback. Checkout, dashboards, verify and demo shop are mock. No wallet, no chain writes |
-| 6 SDK + demo shop | `@numa/sdk-server` built and unit-tested. `@numa/sdk-react` and `apps/demo-shop` not started |
+| 6 SDK + demo shop | `@numa/sdk-server` and `@numa/sdk-react` (gasless EIP-3009 checkout component) built and unit-tested with a fake wallet; `apps/demo-shop` built (a store page that adds the checkout in about 20 lines). **None of it has run against a deployed router or a real wallet** |
 | 7 End-to-end | Not started (blocked on deployment) |
 
 ## Test counts (2026-11-07, local and CI)
-Foundry 55 · `apps/api` 84 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 28 · `packages/sdk-server` 5 · `packages/shared` 2.
+Foundry 55 · `packages/sdk-react` 11 · `apps/api` 90 (+8 Postgres integration tests that run in CI and are skipped locally without `TEST_DATABASE_URL`) · `packages/arkiv` 26 · `apps/web` 28 · `packages/sdk-server` 6 · `packages/shared` 6.
 
 ## Blockers
 1. **Deployment** of `CampaignRegistry` and `NumaRouter` to Whitechain Sepolia needs a human with a funded Foundry keystore (Member 1). Then fill `packages/shared/src/addresses.ts` and `.env`.
