@@ -8,6 +8,8 @@ for the contract-level fixes this checklist assumes are already in place.
 - `pnpm --filter @numa/api rehearsal` runs the whole flow on a fork of the chain first (see `DEVELOPMENT.md`). It passed 11/11 on 2026-11-07 and found two real bugs (an out-of-gas relay and blank-env handling) that are now fixed.
 - After deploying and filling `.env`, run `pnpm --filter @numa/api preflight -- --campaign <id>` and fix any FAIL before starting the API.
 
+For hosting the API and web apps (Render free tier) after deploying the contracts, see `docs/HOSTING.md`.
+
 ## 0. Preconditions
 
 - [ ] `forge build` and `forge test` both pass (55/55 as of this writing; re-run before deploying

@@ -7,6 +7,8 @@ import { NumaCheckout } from "@numa/sdk-react";
 const CAMPAIGN_ID = import.meta.env.VITE_CAMPAIGN_ID ?? "1";
 const CREATOR = new URLSearchParams(location.search).get("creator") ?? import.meta.env.VITE_CREATOR ?? "0x0000000000000000000000000000000000000000";
 const PRICE = "25.00";
+// "/api" works in dev (Vite proxy); in production set VITE_API_URL to the numa API's public URL.
+const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
 
 function Shop() {
   const [receipt, setReceipt] = useState<string>();
@@ -18,8 +20,8 @@ function Shop() {
         <p>Thanks! Your receipt: <a href={receipt} target="_blank" rel="noreferrer">view on the explorer</a></p>
       ) : (
         <NumaCheckout
-          orderUrl="/api/orders"
-          relayUrl="/api"
+          orderUrl={`${API}/orders`}
+          relayUrl={API}
           params={{ campaignId: CAMPAIGN_ID, creator: CREATOR, amount: PRICE }}
           label={`Pay $${PRICE} with USDT`}
           onPaid={(r) => setReceipt(r.explorerUrl)}
