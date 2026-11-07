@@ -1,0 +1,120 @@
+/* Creator dashboard: wallet gate, notes, matches and the real earnings list. */
+
+.gate-panel p {
+  max-width: 540px;
+  margin: 28px 0;
+  color: var(--grey);
+  font-size: 18px;
+  line-height: 1.5;
+}
+.gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.gate-actions .hard-button {
+  min-width: 260px;
+}
+.link-button {
+  margin-left: 10px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--grey);
+  background: none;
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+}
+.link-button:hover {
+  color: var(--bone);
+  border-color: var(--bone);
+}
+.panel-note {
+  margin: 14px 0;
+  color: var(--grey);
+  font: 12px / 1.55 "JetBrains Mono";
+}
+.list-title {
+  margin: 34px 0 8px;
+  color: var(--grey);
+  font: 700 11px "JetBrains Mono";
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.match-tag {
+  color: var(--green);
+  font-weight: 700;
+}
+.mini-row[role="button"] {
+  cursor: pointer;
+}
+.mini-row[role="button"]:hover b {
+  color: var(--green);
+}
+.outline-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.checklist small {
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+}
+
+/* recent verified sales as bars */
+.sale-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 2fr 140px 24px;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.sale-bar > span b {
+  display: block;
+}
+.sale-bar > span small {
+  color: var(--grey);
+  font: 10px "JetBrains Mono";
+  text-transform: uppercase;
+}
+.sale-bar i {
+  display: block;
+  height: 10px;
+  background: var(--green);
+  transition: width 0.7s var(--expo);
+}
+.sale-bar i.bar-released {
+  background: var(--black);
+}
+.sale-bar i.bar-refunded,
+.sale-bar i.bar-partially_refunded {
+  background: var(--red);
+}
+.sale-bar strong {
+  font: 700 14px "JetBrains Mono";
+  text-align: right;
+}
+.sale-bar button {
+  border: 0;
+  background: none;
+  color: var(--grey);
+}
+.sale-bar button:hover {
+  color: var(--green);
+}
+@media (max-width: 700px) {
+  .sale-bar {
+    grid-template-columns: 1fr auto;
+  }
+  .sale-bar i {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+
+.earnings-panel .release-callout p {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  font: 400 15px / 1.5 "Inter Tight";
+  text-transform: none;
+  letter-spacing: 0;
+}

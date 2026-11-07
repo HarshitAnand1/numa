@@ -14,6 +14,7 @@ describe("parseRoute", () => {
     expect(parseRoute("/demo-shop").view).toBe("demo");
     expect(parseRoute("/verify").view).toBe("verify");
     expect(parseRoute("/system-states").view).toBe("system");
+    expect(parseRoute("/agents").view).toBe("agents");
   });
 
   it("reads the campaign id from /campaigns/:id", () => {
@@ -43,6 +44,9 @@ describe("parseRoute", () => {
   it("treats pay/receipt links as the checkout", () => {
     expect(parseRoute("/pay/RIO-08-X").view).toBe("checkout");
     expect(parseRoute("/receipt/0xabc").view).toBe("checkout");
+    // the click tracker redirects to /checkout/<code>
+    expect(parseRoute("/checkout/RIO-08-X").view).toBe("checkout");
+    expect(parseRoute("/checkout").view).toBe("notFound");
     expect(parseRoute("/pay").view).toBe("notFound");
   });
 
@@ -69,6 +73,7 @@ describe("routeToPath", () => {
     { view: "demo" },
     { view: "verify" },
     { view: "system" },
+    { view: "agents" },
   ];
   it("round-trips every navigable route", () => {
     for (const r of routes) expect(parseRoute(routeToPath(r))).toEqual(r);
@@ -77,7 +82,7 @@ describe("routeToPath", () => {
     expect(routeToPath({ view: "campaignDetail" })).toBe("/campaigns");
   });
   it("has a distinct, non-empty title for every view", () => {
-    const views: View[] = ["home", "how", "campaigns", "campaignDetail", "creator", "leaderboard", "creatorApp", "merchant", "checkout", "demo", "verify", "system", "notFound"];
+    const views: View[] = ["home", "how", "campaigns", "campaignDetail", "creator", "leaderboard", "creatorApp", "merchant", "checkout", "demo", "verify", "system", "agents", "notFound"];
     for (const v of views) expect(titleFor(v).length).toBeGreaterThan(3);
     expect(new Set(views.map(titleFor)).size).toBe(views.length);
   });

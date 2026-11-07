@@ -1,0 +1,154 @@
+/* Real creator and merchant tools. The app panels are light, so the dark agents form styles get light variants here. */
+
+.sample-tag {
+  margin-left: auto;
+  margin-right: 6px;
+  padding: 2px 6px;
+  border: 1px solid #ffb800;
+  color: #ffb800;
+  font: normal 600 9px "JetBrains Mono";
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app-panel .ag-field.light > span {
+  color: #4a4a4a;
+}
+.app-panel .ag-field.light input,
+.app-panel .ag-field.light select,
+.app-panel .ag-field.light textarea {
+  width: 100%;
+  padding: 13px 38px 13px 14px;
+  border: 1px solid rgba(10, 10, 11, 0.4);
+  border-radius: 0;
+  background: #fff;
+  color: var(--black);
+  font: 600 16px "JetBrains Mono";
+}
+.app-panel .ag-field.light textarea {
+  font: 400 15px "Inter Tight";
+  resize: vertical;
+}
+.app-panel .ag-field.light select {
+  padding-right: 14px;
+}
+.app-panel .ag-field.light input:focus,
+.app-panel .ag-field.light select:focus,
+.app-panel .ag-field.light textarea:focus {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+.app-panel .ag-field.light.bad input,
+.app-panel .ag-field.light.bad textarea {
+  border-color: var(--red);
+}
+.app-panel .ag-field.light small {
+  color: #4a4a4a;
+}
+.app-panel .ag-field.light.bad small {
+  color: #c4150c;
+}
+.app-panel .ag-field.light > div i {
+  color: #4a4a4a;
+}
+.app-panel .ag-field.light > div i[role="button"] {
+  cursor: pointer;
+}
+.app-panel .ag-toggle.light {
+  align-self: end;
+  color: var(--black);
+}
+.app-panel .ag-grid.light {
+  margin: 8px 0 4px;
+}
+.app-panel .ag-facts.light {
+  margin: 14px 0;
+  border-color: rgba(10, 10, 11, 0.18);
+}
+.app-panel .ag-facts.light div {
+  border-color: rgba(10, 10, 11, 0.18);
+}
+.app-panel .ag-facts.light dt {
+  color: #4a4a4a;
+}
+.app-panel .panel-note,
+.app-panel .ag-msg {
+  color: #2b2b2e;
+}
+.app-panel .ag-msg {
+  background: rgba(10, 10, 11, 0.04);
+}
+.app-panel .ag-msg.ok {
+  border-color: #159a00;
+}
+.app-panel .ag-msg.err {
+  border-color: #c4150c;
+}
+.app-panel .panel-note a,
+.app-panel .ag-msg a {
+  color: #0a7a00;
+}
+.app-panel .outline-button {
+  border: 1px solid var(--black);
+  color: var(--black);
+}
+.link-builder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px 20px;
+  align-items: end;
+  margin: 18px 0 10px;
+}
+.link-builder .hard-button {
+  align-self: end;
+}
+.links-panel .data-list-row small,
+.links-panel .data-list-row code {
+  overflow-wrap: anywhere;
+}
+.links-panel .data-list-row > button {
+  border: 1px solid var(--black);
+  background: none;
+  padding: 6px 10px;
+  font: 600 11px "JetBrains Mono";
+}
+
+.offer-card {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid rgba(10, 10, 11, 0.25);
+  background: #fff;
+}
+.offer-card h3 {
+  margin: 0 0 4px;
+  font: 800 18px "Unbounded";
+  letter-spacing: -0.04em;
+}
+.offer-card p {
+  margin: 4px 0;
+  color: #2b2b2e;
+}
+.offer-card .offer-aud {
+  color: var(--black);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.offer-card small.err {
+  color: #c4150c;
+  font: 11px "JetBrains Mono";
+}
+.offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.offer-actions a {
+  color: #0a7a00;
+  font: 11px "JetBrains Mono";
+}
+.merchant-tools .mini-row {
+  cursor: default;
+}
