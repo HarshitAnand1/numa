@@ -56,6 +56,8 @@ describe("Relayer", () => {
     expect(r.blockNumber).toBe(9n);
     expect(r.gasCostWei).toBe(900n);
     expect(wallet.writeContract).toHaveBeenCalledOnce();
+    // the gas limit carries a 25% buffer over the estimate (100 -> 125): an exact estimate can run out of gas once mined
+    expect((wallet.writeContract.mock.calls[0]![0] as { gas: bigint }).gas).toBe(125n);
     expect(await store.spentToday("1970-01-01")).toBe(900n);
   });
   it("rejects expired order", async () => {

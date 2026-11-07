@@ -25,6 +25,9 @@ export interface RelayerConfig {
   receiptTimeoutMs?: number;
 }
 
+/** Gas limit = estimate + 25%. Unused gas is refunded, so this only raises the worst-case cost that the daily cap and balance checks use. */
+export const withGasBuffer = (estimate: bigint) => estimate + estimate / 4n;
+
 export interface RelayResult { txHash: Hex; blockNumber: bigint; gasCostWei: bigint }
 
 /**
@@ -103,9 +106,11 @@ export class Relayer {
         throw new RelayError("SIMULATION_FAILED", e instanceof Error ? e.message.split("\n")[0]! : "simulation failed");
       }
 
-      const gas = await this.pub.estimateContractGas({
+      // An exact estimate can run out of gas by the time the tx is mined: storage costs (zero to non-zero) and the EIP-150
+      // 63/64 rule depend on state that other txs (e.g. a keeper release) change in between. Found by the fork rehearsal.
+      const gas = withGasBuffer(await this.pub.estimateContractGas({
         address: this.cfg.router, abi: numaRouterAbi, functionName: "payOrder", args, account: this.account,
-      });
+      }));
       const maxCost = gas * gasPrice;
       if ((await this.store.spentToday(day)) + maxCost > this.cfg.dailyCapWei) throw new RelayError("DAILY_CAP_EXCEEDED", "relayer daily gas cap reached");
       const balance = await this.pub.getBalance({ address: this.account.address });
