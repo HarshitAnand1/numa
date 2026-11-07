@@ -8,7 +8,7 @@ const schema = z.object({
   PORT: z.coerce.number().default(8787),
   /** Postgres for relayer limits + indexer cursor. Falls back to in-memory (lost on restart) when unset. */
   DATABASE_URL: z.string().url().optional(),
-  WHITECHAIN_RPC_URL: z.string().url().refine((u) => u.startsWith("https://"), "RPC must be https"),
+  WHITECHAIN_RPC_URL: z.string().url().refine((u) => u.startsWith("https://") || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(u), "RPC must be https (plain http only for a local node)"),
   WHITECHAIN_CHAIN_ID: z.coerce.number().default(1874),
   NUMA_ROUTER_ADDRESS: addr,
   /** CampaignRegistry address. Required: the relayer reads `getCampaign(campaignId).commissionBps`
@@ -48,7 +48,8 @@ const schema = z.object({
 export type Env = z.infer<typeof schema>;
 
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
-  const r = schema.safeParse(source);
+  // A blank value (`FOO=` as shipped in .env.example) means "not set": optional settings stay off and defaults apply.
+  const r = schema.safeParse(Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined && v.trim() !== "")));
   if (!r.success) {
     const msg = r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new Error(`Invalid environment: ${msg}`);
