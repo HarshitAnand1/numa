@@ -32,7 +32,7 @@ See `ARCHITECTURE.md`. Components: web app, API (order service + relayer + index
 ## 9. Components
 | Component | Owner | Status |
 |---|---|---|
-| `packages/contracts` (CampaignRegistry, NumaRouter) | Member 1 | [built] 55 local tests; **not deployed** |
+| `packages/contracts` (CampaignRegistry, NumaRouter) | Member 1 | [built] 55 local tests; deployed and verified on Whitechain Sepolia (`WHITECHAIN.md`); no real payment yet |
 | `apps/api` order service, relayer, reconciler, release keeper | Member 2 | [built] tested with mocked chain; never run against a deployed router |
 | `packages/arkiv` | Member 2 | [built] live round trips pass on Rabdi |
 | indexer, reputation, discovery API, click tracker | Member 2 | [built] tested offline; not run against a deployed router |

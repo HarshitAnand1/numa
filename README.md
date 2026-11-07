@@ -4,7 +4,7 @@
 
 numa is a drop-in USDT checkout and creator marketplace on Whitechain Sepolia. A buyer's gasless (EIP-3009) USDT payment settles through `NumaRouter`: the merchant's net is paid, the creator's commission is held through a refund window, and a protocol fee is collected. Discovery, offers, decisions, links, conversion history, profiles, invites and endorsements are wallet-owned [Arkiv](https://docs.arkiv.network) entities that anyone can query.
 
-> **Status (2026-11-07):** contracts, relayer, indexer, Arkiv layer and discovery API are built and tested. **Nothing is deployed yet and a real gasless checkout has not been demonstrated.** The frontend's public screens read live data; its checkout is still a mock. Details and the exact list of what is and isn't verified: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
+> **Status (2026-11-07):** contracts, relayer, indexer, Arkiv layer and discovery API are built and tested. **The contracts are deployed and verified on Whitechain Sepolia, but a real gasless USDT payment through them has not been run yet.** The frontend's public screens read live data; its checkout is still a mock. Details and the exact list of what is and isn't verified: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ## How it works
 1. A **merchant** creates a campaign (commission rate, end date, payout signer) on `CampaignRegistry` and publishes it to Arkiv.
@@ -50,7 +50,7 @@ Primary fit: **Scale · Payments Nobody Notices** (gasless USDT checkout, mercha
 
 **Why this needs on-chain USDT settlement on Whitechain:** the payment, the three-way split (merchant, creator commission, protocol fee) and the held-then-released commission are enforced by one atomic contract transaction, so a creator can prove a sale from the public chain without trusting the merchant or the platform. A card or bank rail cannot split one payment to an unaffiliated third party at settlement, hold their share against a refund window, or give anyone a publicly checkable receipt.
 
-**Current state against the track requirements** (full checklist in [`docs/WHITECHAIN.md`](docs/WHITECHAIN.md)): contracts are **not deployed yet** and there is **no settled-USDT explorer link yet**; both will be added here as soon as they exist. Feedback for the Whitechain team: [`WHITECHAIN_FEEDBACK.md`](WHITECHAIN_FEEDBACK.md).
+**Current state against the track requirements** (full checklist in [`docs/WHITECHAIN.md`](docs/WHITECHAIN.md)): the contracts are **deployed and verified** on Whitechain Sepolia (1874): [`CampaignRegistry` `0xD924…8425`](https://explorer.testnet.whitechain.io/address/0xd924385d22626db2894d25b5f12253bc36148425) and [`NumaRouter` `0x51fC…c2Fc`](https://explorer.testnet.whitechain.io/address/0x51fcf8f50abb17a0d4d70ba14b4f6394a583c2fc) (0.5% fee, 60 s refund window, test USDT `0xcedf…55a7`). There is **no settled-USDT explorer link yet**: it will be added here after the first real payment, and not before. Feedback for the Whitechain team: [`WHITECHAIN_FEEDBACK.md`](WHITECHAIN_FEEDBACK.md).
 
 ## Arkiv (hackathon track: Build on Arkiv)
 Marketplace data lives in wallet-owned Arkiv entities on Rabdi (chain 7794095). Submission files: [`schema`](arkiv/schema.md) (entities, indexes, owners, expiry), [`how-you-use-arkiv`](arkiv/how-you-use-arkiv.md), [`why-arkiv`](arkiv/why-arkiv.md), [`reach`](arkiv/reach.md), [`friction`](arkiv/friction.md).
