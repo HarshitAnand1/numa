@@ -13,7 +13,7 @@ import { getBalance, getGasPrice } from "viem/actions";
 import {
   arkivChain, createArkivReader, createArkivWriter, getProfile, listCampaigns, listDecisions, listEndorsements, listInvitesFor, listOffers,
   listConversions, listLiveOffers, topConversions, publishCampaign, publishConversion, publishDecision, publishEndorsement, publishInvite, publishLink, publishOffer, publishProfile,
-  renewProfile, resolveLink, searchCreators, setProfileAvailability, type ArkivWriter,
+  findLinksByCode, listOffersByCreator, renewProfile, resolveLink, searchCreators, setProfileAvailability, type ArkivWriter,
 } from "../src/index.js";
 
 const EXPLORER = "https://rabdi.explorer.arkiv.network";
@@ -115,6 +115,9 @@ async function main() {
     await check("creator publishes offer; merchant publishes decision; decision is owner-filtered", async () => {
       budget(); offerKey = note("offer", await publishOffer(creator, { campaignId, channel: "youtube", audience: "devs", askBps: 800, expectedReach: 1000n }), "creator").entityKey;
       await eventually(() => listOffers(reader, campaignId), (o) => o.some((x) => x.entityKey === offerKey));
+      const mine = await eventually(() => listOffersByCreator(reader, creatorAcct.address), (o) => o.some((x) => x.entityKey === offerKey));
+      if (mine.value.some((x) => x.creator.toLowerCase() !== creatorAcct.address.toLowerCase())) throw new Error("listOffersByCreator returned someone else's offer");
+      if ((await listOffersByCreator(reader, merchantAcct.address)).some((x) => x.entityKey === offerKey)) throw new Error("creator's offer visible under the merchant wallet");
       budget(); note("decision", await publishDecision(merchant, { offerKey, campaignId, result: "approved", approveTx: fakeTx, campaignEndsAt: endsAt }), "merchant");
       await eventually(() => listDecisions(reader, campaignId, merchantAcct.address), (d) => d.length === 1);
       const forged = await listDecisions(reader, campaignId, creatorAcct.address);
@@ -125,6 +128,11 @@ async function main() {
       budget(); note("link", await publishLink(creator, { code, campaignId, days: 7 }), "creator");
       await eventually(() => resolveLink(reader, { code, campaignId, expectedCreator: creatorAcct.address }), (l) => !!l);
       if (await resolveLink(reader, { code, campaignId, expectedCreator: merchantAcct.address })) throw new Error("link resolved for the wrong creator");
+      const found = await eventually(() => findLinksByCode(reader, code), (l) => l.length > 0);
+      const f = found.value[0]!;
+      if (f.creator.toLowerCase() !== creatorAcct.address.toLowerCase() || f.campaignId !== campaignId) throw new Error("findLinksByCode returned the wrong owner/campaign");
+      if (!(f.createdAt > 0)) throw new Error("no creation block on the link (needed for first-claim ordering)");
+      return `findLinksByCode ok, created at block ${f.createdAt}`;
     });
     await check("merchant invite and endorsement are queryable by creator address", async () => {
       budget(); note("invite", await publishInvite(merchant, { campaignId, creator: creatorAcct.address, offeredBps: 900, message: "live check" }), "merchant");
