@@ -113,6 +113,27 @@ export async function resolveLink(r: ArkivReader, p: { code: string; campaignId:
   return e ? { entityKey: e.$key, creator: e.$owner, code: e.code.value, campaignId: e.campaignId.value } : undefined;
 }
 
+/**
+ * Every live link claiming `code`, oldest first. Anyone can publish a link with any code, so this is UNVERIFIED: the caller must
+ * check each candidate on-chain (an approved creator on an existing campaign) before trusting it. `createdAt` is the creation
+ * block, so "first claimed" is a deterministic tie-break between two wallets that chose the same code.
+ */
+export async function findLinksByCode(r: ArkivReader, code: string, limit = 20) {
+  const res = await r.select().from(LinkSchema).where(eq("code", code)).limit(limit).fetch();
+  return res.entities
+    .map((e) => ({ entityKey: e.$key as Hex, creator: e.$owner as Address, code: e.code.value, campaignId: e.campaignId.value, createdAt: Number((e as unknown as { $createdAt?: bigint }).$createdAt ?? 0n) }))
+    .sort((a, b) => a.createdAt - b.createdAt || (a.entityKey < b.entityKey ? -1 : 1));
+}
+
+/** Live offers published BY `creator` (ownedBy: nobody else's offer is returned), for the creator's own "offers" tab. */
+export async function listOffersByCreator(r: ArkivReader, creator: Address, limit = 50, offset = 0) {
+  const res = await r.select().from(OfferSchema).where(gte("askBps", u64(0n))).ownedBy(creator).orderBy(asc("$key")).limit(limit).offset(offset).fetch();
+  return res.entities.map((e) => ({
+    entityKey: e.$key as Hex, creator: e.$owner as Address, campaignId: e.campaignId.value, channel: e.channel.value, audience: e.audience.value,
+    askBps: Number(e.askBps.value), expectedReach: e.expectedReach.value,
+  }));
+}
+
 /** Conversions for a creator, accepted only from the Numa writer wallet. */
 export async function listConversions(r: ArkivReader, p: { creator: Address; writer: Address; limit?: number; offset?: number }) {
   const res = await r.select().from(ConversionSchema).where(eq("creator", addr(p.creator))).ownedBy(p.writer).limit(p.limit ?? 100).offset(p.offset ?? 0).fetch();
