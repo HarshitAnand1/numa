@@ -25,22 +25,19 @@ Notes: `merchant` (the campaign's merchant address) is distinct from the payout-
 
 Merchants must also `USDT.approve(NumaRouter, …)` so refunds can be pulled from them (ADR 0001).
 
-## React: `@numa/sdk-react` **[built, unit-tested with a fake wallet; not run against a deployed router or a real wallet]**
+## React — `@numa/sdk-react` **[built, unit-tested; never run against a real deployment]**
+`<NumaCheckout orderUrl="/api/order" onPaid={...} />`: fetch the payload, have the buyer sign `ReceiveWithAuthorization` (`receiveAuthTypedData` in `@numa/shared`, `nonce = authNonce`, `to = router`), POST `{order, merchantSig, buyer, auth}` to the relayer's `/relay`, return the tx hash. Owner: Member 3.
+**Status:** built (`packages/sdk-react`), used by `apps/web` and `apps/demo-shop`. Exports: `NumaCheckout` (drop-in widget, restylable via `numa-*` classes), `NumaProvider` / `numaWagmiConfig` (injected wallets only, Whitechain only), the `useCheckout` hook for custom UIs, and the pure pieces (`verifyOrderPayload`, `buildAuthTypedData`, `toRelayBody`, `describeRelayFailure`, ...). The verification step is the point: **the buyer is only asked to sign after the order service's answer is re-derived from the contracts** (right buyer, creator, campaign and exact amount; the campaign's own merchant and payout signer; settleable campaign, approved creator; nonce recomputed from on-chain commission and fee). Nothing is signed if any check fails.
 ```tsx
-import { NumaCheckout } from "@numa/sdk-react";
-
-<NumaCheckout
-  orderUrl="/api/orders"        // the merchant's endpoint that returns a signed order (Numa.createOrder, or the demo POST /orders)
-  relayUrl="/api"               // the Numa relayer API
-  params={{ campaignId: "7", creator, amount: "25.00" }}   // extra fields for the merchant endpoint; the buyer address is added for you
-  onPaid={(r) => console.log(r.explorerUrl)}
-/>
+<NumaProvider>
+  <NumaCheckout
+    config={{ chainId: 1874, router, registry, token, orderUrl: "/api/order", relayUrl: "https://…/relay" }}
+    params={{ campaignId: "7", creator, amount: "25.00" }}
+    onPaid={({ txHash }) => …}
+  />
+</NumaProvider>
 ```
-What it does, in order: connects the wallet, POSTs `{...params, buyer}` to `orderUrl`, adds/switches to Whitechain Sepolia if needed, checks the buyer holds enough USDT, asks the wallet for **one EIP-712 signature** (an EIP-3009 `ReceiveWithAuthorization` with `to = router` and `nonce = authNonce`, so no gas and no transaction), POSTs the relay body to `{relayUrl}/relay`, and shows the explorer receipt. A relay timeout or duplicate is resolved by polling `GET /relay/:orderId` rather than reported as a failure. A reverted order is reported as "not charged".
+`orderUrl` receives `POST { campaignId, creator, buyer, amount }` and must answer with the signed order (`@numa/sdk-server`'s `createOrder`; the order now names the buyer, so the older sketch above, which didn't pass one, is out of date). `config` is plain data: nothing is read from environment variables inside the package.
 
-Pieces: `runCheckout(config, onState)` (framework-free, all the logic), `useNumaCheckout(config)` (headless hook returning `{state, pay, reset, busy}` so you can build your own UI), `<NumaCheckout />` (button + error + receipt, `renderReceipt` to customise). Pass `provider` (any EIP-1193 provider, e.g. an embedded wallet) to avoid the injected wallet. Safety: it refuses an order whose buyer isn't the connected account, that has expired, or that fails schema validation; the nonce it signs is the merchant's `OrderCommitment`, which the relayer and router both re-derive and enforce.
-
-Tests (`packages/sdk-react/tests`) run the whole flow against a fake wallet that really signs, a real `Numa` order signer and a relayer stand-in that verifies the buyer's signature the way the real relayer does. **Not verified:** a real browser wallet, the buyer's wallet UX, and anything against a deployed router.
-
-## Demo shop: `apps/demo-shop` **[built; builds; not run against a deployed stack]**
-A separate Vite app whose only numa code is the `<NumaCheckout />` above (about 20 lines, see `src/main.tsx`). `pnpm --filter @numa/demo-shop dev` serves it on :5174 and proxies `/api` to the API (`VITE_API_PROXY`, default `http://localhost:8787`). Set `VITE_CAMPAIGN_ID` (and optionally `VITE_CREATOR`, or open it with `?creator=0x…` as an attribution link would). It uses the API's demo `POST /orders`, so the API needs `MERCHANT_SIGNER_KEY` set to the campaign's payout signer.
+## Demo shop — `apps/demo-shop` **[built; needs deployed contracts for a real purchase]**
+"Kiln & Co.", a deliberately unlike-numa store (`apps/demo-shop`, port 5174). It takes the campaign from `VITE_CAMPAIGN_ID` and the creator from `?creator=0x…` (as an attribution link would), embeds `<NumaCheckout>`, says plainly when contracts aren't deployed or no creator link was used, and keeps the widget mounted after payment so the receipt stays visible. It uses the API's demo `POST /orders`, so the API needs `MERCHANT_SIGNER_KEY` set to the campaign's payout signer. Not run against a deployed stack.

@@ -11,14 +11,12 @@ COPY packages/config/package.json packages/config/
 COPY packages/shared/package.json packages/shared/
 COPY packages/arkiv/package.json packages/arkiv/
 COPY packages/sdk-server/package.json packages/sdk-server/
-COPY packages/sdk-react/package.json packages/sdk-react/
 RUN pnpm install --frozen-lockfile --filter "@numa/api..." --prod=false
 
 COPY packages/config packages/config
 COPY packages/shared packages/shared
 COPY packages/arkiv packages/arkiv
 COPY packages/sdk-server packages/sdk-server
-COPY packages/sdk-react packages/sdk-react
 COPY apps/api apps/api
 
 USER numa

@@ -1,34 +1,13 @@
-import { createRoot } from "react-dom/client";
-import { useState } from "react";
-import { NumaCheckout } from "@numa/sdk-react";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { NumaProvider } from "@numa/sdk-react";
+import App from "./App";
+import "./shop.css";
 
-// A merchant's store page. Everything numa needs is the <NumaCheckout /> below.
-// VITE_CAMPAIGN_ID / VITE_CREATOR come from your deployment; the creator is whoever's attribution link brought the buyer here.
-const CAMPAIGN_ID = import.meta.env.VITE_CAMPAIGN_ID ?? "1";
-const CREATOR = new URLSearchParams(location.search).get("creator") ?? import.meta.env.VITE_CREATOR ?? "0x0000000000000000000000000000000000000000";
-const PRICE = "25.00";
-// "/api" works in dev (Vite proxy); in production set VITE_API_URL to the numa API's public URL.
-const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
-
-function Shop() {
-  const [receipt, setReceipt] = useState<string>();
-  return (
-    <main style={{ font: "16px system-ui, sans-serif", maxWidth: 420, margin: "64px auto", padding: "0 16px" }}>
-      <h1>Pixel Pro Headphones</h1>
-      <p>Wireless headphones. ${PRICE} USDT. No gas token, no seed phrase screens beyond your wallet's own approval.</p>
-      {receipt ? (
-        <p>Thanks! Your receipt: <a href={receipt} target="_blank" rel="noreferrer">view on the explorer</a></p>
-      ) : (
-        <NumaCheckout
-          orderUrl={`${API}/orders`}
-          relayUrl={API}
-          params={{ campaignId: CAMPAIGN_ID, creator: CREATOR, amount: PRICE }}
-          label={`Pay $${PRICE} with USDT`}
-          onPaid={(r) => setReceipt(r.explorerUrl)}
-        />
-      )}
-    </main>
-  );
-}
-
-createRoot(document.getElementById("root")!).render(<Shop />);
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <NumaProvider rpcUrl={import.meta.env.VITE_RPC_URL}>
+      <App />
+    </NumaProvider>
+  </React.StrictMode>,
+);
