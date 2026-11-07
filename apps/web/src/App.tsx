@@ -12,6 +12,8 @@ import { WalletButton } from "./web3/WalletButton";
 import { Agents } from "./agents/AgentsPage";
 import type { Address } from "viem";
 import { ProfileEditor, LinksPanel } from "./creator/CreatorTools";
+import { Verify } from "./verify/VerifyPage";
+import { MerchantOrders, RefundApproval } from "./merchant/LedgerTools";
 import { MerchantCampaigns, MerchantOffers } from "./merchant/MerchantTools";
 import { publishMyOffer } from "./web3/arkivActions";
 import { ArkivWriteError, STEP_TEXT, type ArkivStep } from "./web3/arkivWallet";
@@ -3050,7 +3052,14 @@ function MerchantApp() {
         </aside>
       </section>
     ) : tab === "campaigns" ? (
-      address && isConnected ? <MerchantCampaigns address={address} registry={NUMA_CONFIG?.registry} /> : gate
+      address && isConnected ? (
+        <>
+          <RefundApproval address={address} router={NUMA_CONFIG?.router} />
+          <MerchantCampaigns address={address} registry={NUMA_CONFIG?.registry} />
+        </>
+      ) : gate
+    ) : tab === "orders" ? (
+      address && isConnected ? <MerchantOrders address={address} /> : gate
     ) : tab === "offers" ? (
       address && isConnected ? <MerchantOffers address={address} registry={NUMA_CONFIG?.registry} /> : gate
     ) : (
@@ -3139,7 +3148,7 @@ function MerchantApp() {
         setActive={setTab}
         title={address && isConnected ? shortAddress(address) : "not connected"}
         counts={{}}
-        sampleItems={["overview", "creators", "invites", "orders", "settings"]}
+        sampleItems={["overview", "creators", "invites", "settings"]}
       />
       {content}
     </main>
@@ -3357,98 +3366,6 @@ function SystemStates() {
           </div>
         </div>
       </section>
-    </main>
-  );
-}
-
-function Verify() {
-  const [input, setInput] = useState("");
-  const [checked, setChecked] = useState(false);
-  return (
-    <main className="page verify-page">
-      <section className="verify-intro">
-        <span>JUDGE TOOL / NO TRUST REQUIRED</span>
-        <h1>
-          DON’T TAKE
-          <br />
-          OUR WORD <em>FOR IT.</em>
-        </h1>
-        <p>
-          Paste a Whitechain transaction hash or numa order ID. We’ll show exactly what agrees—and
-          what doesn’t.
-        </p>
-      </section>
-      <section className="verify-box">
-        <label>TRANSACTION HASH OR ORDER ID</label>
-        <div>
-          <input
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setChecked(false);
-            }}
-            placeholder="0xa91f…20c8 or NMA-8821"
-          />
-          <button disabled={!input} onClick={() => setChecked(true)}>
-            VERIFY <Icon name="arrow" />
-          </button>
-        </div>
-        <p>
-          money state comes from Whitechain. Arkiv indexing can lag behind. We label that instead of
-          guessing.
-        </p>
-      </section>
-      {checked && (
-        <section className="verify-result">
-          <div className="result-title">
-            <div>
-              <Icon name="check" size={30} />
-              <span>ORDERSETTLED MATCH</span>
-            </div>
-            <Stamp tone="green">VERIFIED</Stamp>
-          </div>
-          <div className="verify-grid">
-            <div>
-              <small>ORDER</small>
-              <b>NMA-8821</b>
-              <span>chain-confirmed</span>
-            </div>
-            <div>
-              <small>GROSS</small>
-              <b>125.00 USDT</b>
-              <span>block 18,491,202</span>
-            </div>
-            <div>
-              <small>MERCHANT</small>
-              <code>0x4be…8a01</code>
-              <span>101.25 USDT paid</span>
-            </div>
-            <div>
-              <small>CREATOR</small>
-              <code>0x71c…d03a</code>
-              <span>22.50 USDT held</span>
-            </div>
-          </div>
-          <div className="agreement">
-            <p>
-              <Icon name="check" /> Whitechain event and order fields agree
-            </p>
-            <p>
-              <Icon name="check" /> Creator attribution entity owner matches
-            </p>
-            <p className="sync">
-              <i /> Arkiv decision entity syncing
-            </p>
-          </div>
-          <details>
-            <summary>show me the receipts</summary>
-            <pre>
-              event OrderSettled(bytes32 indexed orderId,{"\n"} address merchant, address creator,
-              {"\n"} uint256 gross, uint256 commission)
-            </pre>
-          </details>
-        </section>
-      )}
     </main>
   );
 }

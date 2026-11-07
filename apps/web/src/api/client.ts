@@ -3,7 +3,9 @@ import type {
   ApiCreatorCard,
   ApiInvite,
   ApiLeaderboardRow,
+  ApiLedger,
   ApiLinkStats,
+  ApiReceipt,
   ApiRecommendation,
   ApiReputation,
   ApiTrending,
@@ -103,6 +105,8 @@ export const api = {
     getJson<ApiInvite[]>(`/creators/${address}/invites`, { signal }),
   linkStats: (code: string, creator: string, campaignId: string, signal?: AbortSignal) =>
     getJson<ApiLinkStats>(`/links/${encodeURIComponent(code)}/stats${qs({ creator, campaignId })}`, { signal }),
+  receipt: (orderId: string, signal?: AbortSignal) => getJson<ApiReceipt>(`/receipts/${orderId}`, { signal }),
+  merchantOrders: (address: string, signal?: AbortSignal) => getJson<ApiLedger>(`/merchants/${address}/orders`, { signal }),
   reputation: (address: string, signal?: AbortSignal) =>
     getJson<ApiReputation & { rejected: unknown[] }>(`/creators/${address}/reputation`, { signal }),
 };
