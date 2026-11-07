@@ -18,7 +18,7 @@ import { ReleaseKeeper } from "./services/keeper.js";
 import { MemoryReleaseQueue } from "./services/releaseQueue.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentRunner } from "./agents/runner.js";
-import { ClaudeNotes, templateNotes } from "./agents/llm.js";
+import { ClaudeNotes, GeminiNotes, templateNotes } from "./agents/llm.js";
 import { MemoryPolicyStore, PgPolicyStore } from "./agents/store.js";
 import { registerAgentRoutes } from "./routes/agents.js";
 import { registerLedgerRoutes } from "./routes/ledger.js";
@@ -176,9 +176,12 @@ export function buildServer(env: Env, opts: { logLevel?: string } = {}) {
     const agentAccount = privateKeyToAccount(env.AGENT_WALLET_PRIVATE_KEY as `0x${string}`);
     const store = pool ? new PgPolicyStore(pool) : new MemoryPolicyStore();
     registerAgentRoutes(app, { arkiv: reader, pub, registry: env.CAMPAIGN_REGISTRY_ADDRESS, store, agentAddress: agentAccount.address });
-    const notes = env.ANTHROPIC_API_KEY
-      ? new ClaudeNotes(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), env.AGENT_LLM_MODEL, (e) => app.log.warn(e, "agent note via Claude failed; used template"))
+    const provider = env.AGENT_LLM_PROVIDER === "auto" ? (env.GEMINI_API_KEY ? "gemini" : env.ANTHROPIC_API_KEY ? "anthropic" : "none") : env.AGENT_LLM_PROVIDER;
+    const notes =
+      provider === "gemini" && env.GEMINI_API_KEY ? new GeminiNotes(env.GEMINI_API_KEY, env.GEMINI_MODEL, (e) => app.log.warn({ err: e instanceof Error ? e.message : String(e) }, "agent note via Gemini failed; used template"))
+      : provider === "anthropic" && env.ANTHROPIC_API_KEY ? new ClaudeNotes(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), env.AGENT_LLM_MODEL, (e) => app.log.warn(e, "agent note via Claude failed; used template"))
       : templateNotes;
+    app.log.info({ agentNotes: notes === templateNotes ? "template" : provider }, "negotiation agents enabled");
     const registry = env.CAMPAIGN_REGISTRY_ADDRESS;
     const merchants = new Map<string, `0x${string}` | null>();
     const runner = new AgentRunner({
