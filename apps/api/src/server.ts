@@ -21,6 +21,7 @@ import { AgentRunner } from "./agents/runner.js";
 import { ClaudeNotes, templateNotes } from "./agents/llm.js";
 import { MemoryPolicyStore, PgPolicyStore } from "./agents/store.js";
 import { registerAgentRoutes } from "./routes/agents.js";
+import { registerLedgerRoutes } from "./routes/ledger.js";
 import { registerCors } from "./routes/cors.js";
 import { registerDiscoveryRoutes } from "./routes/discovery.js";
 import { registerClickRoutes, type ClickDeps } from "./routes/clicks.js";
@@ -29,8 +30,8 @@ import { PgClickStore, PgReleaseQueue } from "./db/pgStore.js";
 import { creatorReputation } from "./services/reputationService.js";
 import { resolveLink } from "@numa/arkiv";
 
-export function buildServer(env: Env) {
-  const app = Fastify({ logger: { redact: ["req.headers.authorization"] } });
+export function buildServer(env: Env, opts: { logLevel?: string } = {}) {
+  const app = Fastify({ logger: { redact: ["req.headers.authorization"], ...(opts.logLevel && { level: opts.logLevel }) } });
   const chain = { ...whitechainSepolia, id: env.WHITECHAIN_CHAIN_ID };
   const transport = http(env.WHITECHAIN_RPC_URL);
   const pub = createPublicClient({ chain, transport });
@@ -203,6 +204,8 @@ export function buildServer(env: Env) {
     });
     app.addHook("onClose", async () => { if (timer) clearInterval(timer); });
   }
+
+  registerLedgerRoutes(app, { pub, router: env.NUMA_ROUTER_ADDRESS, relayStore, startBlock: env.INDEXER_START_BLOCK });
 
   registerClickRoutes(app, {
     clicks: pool ? new PgClickStore(pool) : new MemoryClickStore(), checkoutBaseUrl: env.CHECKOUT_BASE_URL,

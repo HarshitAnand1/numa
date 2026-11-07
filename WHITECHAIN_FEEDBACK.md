@@ -8,6 +8,9 @@ Honest notes from building numa (a gasless USDT checkout) against Whitechain Sep
 - **We could derive the token's EIP-712 domain and check it.** `name="Tether USD"`, `version="1"`, `chainId=1874`, `verifyingContract=<proxy>`. The hash of that domain equals the contract's `DOMAIN_SEPARATOR()`, and a unit test in our repo pins it.
 - Standard EVM tooling (Foundry, viem) worked against the RPC without special handling.
 
+- **Forking the testnet with Foundry's anvil works** (`anvil --fork-url <rpc> --chain-id 1874`), including the USDT proxy. That let us rehearse the whole gasless flow against the real token's EIP-3009 before deploying. The token's `owner()` can `mint`, which made funding a test buyer easy on the fork.
+- **Block time looked like about 1 second** on the public RPC (7 blocks in 6 seconds when we sampled), which keeps receipt waits short.
+
 ## Where we got stuck or found gaps
 - **The USDT's EIP-712 domain wasn't something we found stated for integrators.** We reverse-engineered it from `DOMAIN_SEPARATOR()` and the bytecode. A short "integrating USDT on Whitechain Sepolia" page with the domain, the proxy and implementation addresses, and a note that `receiveWithAuthorization` requires `msg.sender == to`, would have saved real time. (If this page exists, we missed it; point us to it and we'll correct this line.)
 - **Implementation source.** We could not confirm that the USDT implementation's source is published on the explorer; we relied on selector inspection instead.

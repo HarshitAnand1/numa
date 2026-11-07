@@ -17,6 +17,8 @@ Workstream branches: `feat/contracts` (Member 1), `feat/backend-relayer` and sho
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | all TypeScript packages (lint excludes contracts; use `forge fmt` there) |
 | `pnpm contracts:build` / `pnpm contracts:test` | Foundry build and tests |
 | `pnpm --filter @numa/web dev` | frontend dev server (proxies `/api` to `VITE_API_PROXY`, default `http://localhost:8787`) |
+| `pnpm --filter @numa/api rehearsal` | local end-to-end rehearsal on a **fork** of Whitechain Sepolia (see below) |
+| `pnpm --filter @numa/api preflight [-- --campaign N]` | read-only deploy-day checks against the chain in `.env` |
 | `pnpm --filter @numa/demo-shop dev` | the demo store (adds the checkout component), on :5174 |
 | `pnpm --filter @numa/api dev` | API with watch; needs a full `.env` |
 | `pnpm --filter @numa/api demo:fake-clicks -- --code X --n 500 --creator 0x.. --campaign N` | send real HTTP clicks to the click tracker (see `DEMO.md`) |
@@ -41,3 +43,11 @@ See `.env.example` for every variable.
 - **API image:** `docker build -f docker/api.Dockerfile -t numa-api .` (non-root user, `/health` healthcheck, ~590 MB; runs the TypeScript sources with tsx). Full stack: fill `.env` then `docker compose --profile app up --build` (Postgres + API; the API gets `DATABASE_URL` pointing at the compose Postgres). Build and `/health` were verified locally; the compose `app` profile itself was config-validated only.
 - **Lint:** `pnpm lint` (ESLint 9 + typescript-eslint recommended; contracts are excluded — use `forge fmt`). Currently clean.
 - **CI:** `.github/workflows/ci.yml` runs typecheck, lint and tests (with a Postgres service, so the Postgres integration tests run) plus `forge build` / `forge test`. It runs on every pull request and passes on `main`. CI installs with `--frozen-lockfile`, so commit `pnpm-lock.yaml` whenever dependencies change.
+
+## Rehearsal on a fork (before any real deployment)
+`pnpm --filter @numa/api rehearsal` needs `forge build` output and `anvil`. It forks Whitechain Sepolia (so the **real** test USDT proxy and its EIP-3009 are used), deploys `CampaignRegistry` and `NumaRouter` to the fork, creates a campaign, mints test USDT by impersonating the token owner (fork only), starts the real API (relayer, indexer, keeper) and runs the real checkout code with a wallet that holds **zero WBT**. It asserts exact on-chain balances for: a gasless settlement, duplicate rejection, a forged request, automatic commission release, a partial refund with proportional clawback, an underfunded buyer, the preflight, and the receipt and CSV export. It touches neither the real chain nor Arkiv, needs the public RPC for forking (override with `REHEARSAL_FORK_URL`), and takes about a minute. It is not in CI because it depends on the live RPC.
+
+What it does not prove: the real chain under load, real wallets, Arkiv mirroring (noop sink here), the faucet, or the verified-on-explorer step.
+
+## Preflight
+`pnpm --filter @numa/api preflight` (optionally `-- --campaign 1`) is read-only and sends no transaction. It checks: RPC reachable and on the expected chain, router and registry have code, the router is wired to this registry and the **real** test USDT, fee and refund window, the USDT `DOMAIN_SEPARATOR` equals what the checkout signs, the relayer wallet has WBT and the network gas price is under the ceiling, the demo merchant signer is the campaign's payout signer, plus warnings for missing Postgres, CORS and the Arkiv key. Exit code 1 on any failure.
