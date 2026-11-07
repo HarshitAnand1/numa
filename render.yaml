@@ -35,7 +35,9 @@ services:
       - { key: ARKIV_WRITER_PRIVATE_KEY, sync: false }     # optional: enables discovery and conversion mirroring
       - { key: ARKIV_ACCESS_KEY, sync: false }
       - { key: AGENT_WALLET_PRIVATE_KEY, sync: false }     # optional: enables negotiation agents
-      - { key: ANTHROPIC_API_KEY, sync: false }            # optional: Claude phrases agent notes
+      - { key: GEMINI_API_KEY, sync: false }               # optional: Gemini (free tier) phrases agent notes; preferred when set
+      - { key: GEMINI_MODEL, value: "gemini-3.5-flash-lite" }
+      - { key: ANTHROPIC_API_KEY, sync: false }            # optional alternative: Claude phrases agent notes
 
   # Main web app (Vite SPA).
   - type: web

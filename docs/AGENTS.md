@@ -11,7 +11,7 @@ A creator and a merchant can each switch on an agent that negotiates the commiss
 | `numa.negotiation` entity | Arkiv, owner = agent or principal wallet | One message per round: propose / counter / accept / reject. Expires 72h with the offer. |
 | Policy | Postgres (`agent_policies`), private | role, floor/ceiling, opening, auto-accept, max rounds, step, categories. |
 | Decision engine | `apps/api/src/agents/engine.ts` | Pure function. Guardrails are enforced here, not in the model. |
-| Note drafter | `apps/api/src/agents/llm.ts` | Optional Claude call, template fallback. Output is text only. |
+| Note drafter | `apps/api/src/agents/llm.ts` | Optional LLM call (Gemini, which has a free tier, or Claude), template fallback. Output is text only. |
 | Runner | `apps/api/src/agents/runner.ts` | Polls Arkiv, verifies, decides, publishes. Idempotent per (thread, seq). |
 | Feed + status | `GET /agents/threads?principal&role`, `GET /agents/binding?principal&role` | What the UI needs: my threads, and whether my agent is connected. |
 | Deal ticket | `GET /agents/deals` | What the merchant must sign on-chain. |
@@ -42,5 +42,8 @@ Agent wallets hold only tGLM for Arkiv writes. Guardrails are private. Counterpa
 - `numa.agent` / `numa.negotiation` round trip on **live Rabdi**: `pnpm --filter @numa/arkiv live:agents` (4/4): binding visible only under its owner, ordered thread read-back, forged messages fail authorization. Entities were deleted afterwards.
 - Run the runner with `AGENT_WALLET_PRIVATE_KEY` set (plus `CAMPAIGN_REGISTRY_ADDRESS`, Arkiv writer/access key). Poll interval defaults to 15 s so Arkiv indexing (about 0.4 s observed) finishes before the next read; an Arkiv lag longer than the interval could produce a duplicate round, which the engine ignores.
 
+## Choosing the model
+`AGENT_LLM_PROVIDER=auto` (default) uses **Gemini** when `GEMINI_API_KEY` is set (it has a free tier; set `GEMINI_MODEL` to a model Google lists as free, default `gemini-3.5-flash-lite`, since model names change), else **Claude** when `ANTHROPIC_API_KEY` is set, else deterministic templates. Free-tier requests are rate limited and Google's free-tier terms may allow using prompts to improve its products (check them): the prompts here contain only a commission rate, the action and the counterparty's public Arkiv note, never keys or private limits. A rate-limit error, timeout, block or unsafe answer just falls back to the template, so negotiation never depends on the model.
+
 ## Not built / not verified
-Not verified: the Claude note path against the real API (no key was available; the tests use a fake client), anything against a deployed `CampaignRegistry`, entity expiry. The model is optional and only writes the note sentence. Not covered: collusion, spam threads (we ignore unverified messages but they still cost readers a query), multi-campaign bundles, a UI (needs an "agent activity" screen from Member 3).
+Not verified: the Gemini and Claude note paths against the real APIs (no key was available to the author; the tests use fakes; `pnpm --filter @numa/api llm:check` with `GEMINI_API_KEY` in `.env` sends 4 tiny requests and shows which notes came from the model, never printing the key), anything against a deployed `CampaignRegistry`, entity expiry. The model is optional and only writes the note sentence. Not covered: collusion, spam threads (we ignore unverified messages but they still cost readers a query), multi-campaign bundles, a UI (needs an "agent activity" screen from Member 3).

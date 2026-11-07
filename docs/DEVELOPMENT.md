@@ -33,7 +33,7 @@ The `live:*` and `seed:*` scripts read keys from `.env` (`ARKIV_WRITER_PRIVATE_K
 ## Optional features (all off unless configured)
 - `CORS_ORIGINS`, `DISCOVERY_TIMEOUT_MS`: browser access and discovery timeout.
 - `ARKIV_WRITER_PRIVATE_KEY`: enables discovery routes and conversion mirroring.
-- `AGENT_WALLET_PRIVATE_KEY` (+ `ANTHROPIC_API_KEY`, `AGENT_LLM_MODEL`): enables negotiation agents (and Claude-phrased notes).
+- `AGENT_WALLET_PRIVATE_KEY` (+ optionally `GEMINI_API_KEY`/`GEMINI_MODEL` (free tier) or `ANTHROPIC_API_KEY`/`AGENT_LLM_MODEL`, and `AGENT_LLM_PROVIDER`): enables negotiation agents and LLM-phrased notes. `pnpm --filter @numa/api llm:check` tests the key.
 See `.env.example` for every variable.
 
 ## Database
