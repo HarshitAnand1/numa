@@ -39,7 +39,7 @@ See `ARCHITECTURE.md`. Components: web app, API (order service + relayer + index
 | negotiation agents (`docs/AGENTS.md`) | Member 2 | [built backend, ADR 0008 Proposed] no UI |
 | `apps/web` | Member 3 | [partial] public screens read the API; checkout and dashboards are mock |
 | `packages/sdk-server` | Member 2/3 | [built] unit-tested |
-| `packages/sdk-react`, `apps/demo-shop` | Member 3 | [planned] |
+| `packages/sdk-react`, `apps/demo-shop` | Member 2 (took over from Member 3) | [built] tested with a fake wallet; not run against a deployed router |
 
 ## 10. Whitechain integration
 See `WHITECHAIN.md`. Chain 1874; USDT is an EIP-1967 proxy whose implementation exposes EIP-3009 (`receiveWithAuthorization`). Money moves only on Whitechain.
@@ -77,7 +77,7 @@ On-chain: campaigns, approvals, orders (`SMART_CONTRACTS.md`). Arkiv: `ARKIV.md`
 ## 20. API design
 `API.md`: orders and relaying, link click tracking, discovery and reputation, and negotiation agents. All implemented.
 
-## 21. SDK design [server built, React planned]
+## 21. SDK design [server and React built]
 `SDK.md`.
 
 ## 22. Security model / 23. Threat model
