@@ -34,3 +34,6 @@
 
 ## Alternatives
 Your own machine plus a Cloudflare quick tunnel (free, no account) works for a demo while the laptop stays awake; run the same Docker image with the same env. A small VPS with `docker compose --profile app up` also works (see `DEVELOPMENT.md`).
+
+## Hosting `apps/web` on Vercel (Member 3)
+`apps/web/vercel.json` rewrites every path that isn't a static asset to `index.html`, so deep links (`/campaigns/7`, `/verify`, `/creators/0x…`) work after a reload. Set the Vercel project's **Root Directory** to `apps/web`. Set these environment variables, then **redeploy** (Vite bakes them in at build time): `VITE_API_URL` (the deployed API, which must list this site in its `CORS_ORIGINS`), `VITE_NUMA_ROUTER_ADDRESS`, `VITE_CAMPAIGN_REGISTRY_ADDRESS`. Without `VITE_API_URL` the site calls `/api` on its own origin, finds nothing and shows labelled DEMO DATA; without the addresses checkout is a labelled SIMULATION. The API itself (indexer, keeper and relayer loops) does not fit Vercel's serverless functions: host it on Render as above.
