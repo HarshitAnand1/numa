@@ -50,7 +50,7 @@ The payment, the three-way split (merchant net, creator commission, protocol fee
 | Requirement | Status |
 |---|---|
 | Contracts deployed on Whitechain Sepolia (1874) and **verified on the explorer** | **Done.** Deployed and listed as verified by the explorer (see the table above). Re-check the verification status before submitting |
-| At least one real USDT payment (`0xcedf…55a7`) settled through the main flow, **explorer link in the README** | **Not done.** No link exists yet; none will be invented |
+| At least one real USDT payment (`0xcedf…55a7`) settled through the main flow, **explorer link in the README** | **Not done.** No link exists yet; none will be invented. `pnpm --filter @numa/api live:payment` (needs `LIVE_MERCHANT_KEY`, `LIVE_BUYER_KEY`, `MERCHANT_SIGNER_ADDRESS` in your shell, see the script header) sends the real transactions and prints the link; it has not been run |
 | README line on why on-chain stablecoin settlement | Done (section above, mirrored in the README) |
 | Public repo with steady commit history | Repo is currently private; history is incremental |
 | README explaining setup, architecture, limitations | Done (`README.md`, `ARCHITECTURE.md`) |
