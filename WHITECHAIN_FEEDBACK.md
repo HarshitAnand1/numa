@@ -1,6 +1,6 @@
 # Whitechain feedback
 
-Honest notes from building numa (a gasless USDT checkout) against Whitechain Sepolia (chain 1874). Written 2026-11-07. **We have not deployed yet, so this covers research and tooling only; the deployment section is still empty and will be filled in from the real experience, not guessed.**
+Honest notes from building numa (a gasless USDT checkout) against Whitechain Sepolia (chain 1874). Written 2026-11-07. **The contracts are now deployed and verified on Whitechain Sepolia (see `docs/WHITECHAIN.md`), but no real USDT payment has run through them yet. The research and fork-rehearsal notes below come from our own work; the deployment section at the end is still empty and will be filled in from the real experience, not guessed.**
 
 ## What worked
 - **Chain facts matched.** `cast chain-id` against the public RPC returned 1874, as documented.
@@ -16,7 +16,8 @@ Honest notes from building numa (a gasless USDT checkout) against Whitechain Sep
 - **Implementation source.** We could not confirm that the USDT implementation's source is published on the explorer; we relied on selector inspection instead.
 - **Public RPC rate limit (50 requests/s per IP).** Fine for a demo, tight for an indexer and a release keeper that poll, which is why we plan to use the hackathon Ankr endpoint. A note on this in the "connect" docs would help.
 
-## Still to fill in after deployment (TODO(team))
+## Still to fill in from the real deployment (TODO(team))
+The contracts went live in block 12414186 (deployed by Member 1). We have not yet written up that experience, and we have not yet sent a real payment through the deployed router, so the items below stay open:
 - Faucet experience: how much WBT per claim, how often, and whether it covers a relayer running for a weekend.
 - Deploying with Foundry and a keystore on chain 1874: gas behaviour, any flags needed.
 - Verifying contracts on the Whitechain explorer (Blockscout): steps taken, anything that failed.

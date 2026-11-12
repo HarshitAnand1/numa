@@ -17,7 +17,8 @@
 | [`SECURITY.md`](SECURITY.md) | Threat model and honest limitations |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Setup, scripts, database, Docker, CI |
 | [`HOSTING.md`](HOSTING.md) | Deploying the API and web apps on Render's free tier, with the caveats |
-| [`DEMO.md`](DEMO.md) | The 3-minute demo plan and its preconditions |
+| [`DEMO.md`](DEMO.md) | The 3:30 demo timeline, narration and preconditions |
+| [`PITCH.md`](PITCH.md) | The Whitechain and Arkiv track pitches and the slide outline |
 | [`FIGMA_PROMPT.md`](FIGMA_PROMPT.md) | The prompt behind the frontend design |
 | [`REPOSITORY_AUDIT.md`](REPOSITORY_AUDIT.md) | Day-one snapshot of the repo (historical) |
 | [`DECISIONS/`](DECISIONS) | ADRs: 0001 refund funding, 0002 no oracle/Stripe, 0003 Arkiv ownership, 0004 superseded refund draft, 0005 `OrderCommitment`, 0006 pre-deployment hardening, 0007 web as a Vite SPA, 0008 negotiation agents (Proposed) |
