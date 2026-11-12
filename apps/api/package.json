@@ -10,6 +10,7 @@
     "test": "vitest run",
     "demo:fake-clicks": "tsx scripts/fake-clicks.ts",
     "rehearsal": "tsx scripts/rehearsal.ts",
+    "live:payment": "tsx scripts/live-payment.ts",
     "preflight": "node --env-file=../../.env --import tsx scripts/preflight.ts",
     "llm:check": "node --env-file=../../.env --import tsx scripts/llm-check.ts"
   },
